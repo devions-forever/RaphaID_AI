@@ -315,7 +315,10 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
                 name = item["class_name"].replace("_", " ").title()
                 st.markdown(f"**{name}**")
                 st.caption(f"Conf: {item['confidence']:.1%}")
-                st.caption("⚠️ Needs review" if item["is_uncertain"] else "✓ High confidence")
+                if item["is_uncertain"]:
+                    st.caption(f"{get_icon('warning', '#FFD700', '14', '14')} Needs review")
+                else:
+                    st.caption(f"{get_icon('check', '#64ffda', '14', '14')} High confidence")
 
     _render_grid(initial)
 
@@ -326,11 +329,11 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
         _, c, _ = st.columns([2, 1, 2])
         with c:
             if expanded:
-                if st.button("🔼 Show less", key="gallery_collapse", use_container_width=True):
+                if st.button("Show less", key="gallery_collapse", use_container_width=True):
                     st.session_state.gallery_expanded = False
                     st.rerun()
             else:
-                if st.button(f"🔽 Show all {len(gallery_items)}", key="gallery_expand", use_container_width=True):
+                if st.button(f"Show all {len(gallery_items)}", key="gallery_expand", use_container_width=True):
                     st.session_state.gallery_expanded = True
                     st.rerun()
 
@@ -384,7 +387,7 @@ def _render_patient_intake():
             placeholder="Brief history...", max_chars=250, height=80, key="pt_notes"
         )
 
-        if st.button("🗑 Clear", key="clear_patient"):
+        if st.button("Clear form", key="clear_patient"):
             st.session_state.patient_details = {k: ("" if k != "age" else None) for k in st.session_state.patient_details}
             st.rerun()
 
