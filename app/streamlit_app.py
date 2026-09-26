@@ -9,6 +9,7 @@ Main Streamlit application integrating Detection, Radiology, and Chatbot modules
 # ---------------------------------------------------------------------------
 import torch
 import torch._classes as _tc
+import io
 
 # Monkey patch _ClassNamespace to gracefully handle __path__/__file__ access
 # This prevents: "Tried to instantiate class '__path__.__file__', but it does not exist!"
