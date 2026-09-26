@@ -69,6 +69,7 @@ UI_UPGRADE_PLAN.md
 UI_UPGRADE_PROGRESS.md
 
 # ---------- Streamlit / RaphaID runtime artefacts (regenerated on run) ----------
+data/vector_index/
 test_sessions/
 streamlit_err.txt
 streamlit_out.txt
@@ -93,3 +94,6 @@ ui_shots/
 !results/
 !results/*.png
 !results/*.json
+
+
+.workbuddy-ai/
