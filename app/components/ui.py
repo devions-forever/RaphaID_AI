@@ -7,24 +7,25 @@ from typing import Dict, List, Any
 import streamlit as st
 
 from app.components.icons import get_icon
+from app.components.htmlkit import render_html
 
 
 def metric_card(label: str, value: str, icon_key: str = "dashboard", color: str = "#64ffda") -> None:
     """Render a styled clinical metric card."""
     icon_html = get_icon(icon_key, color, "24", "24") if icon_key else ""
-    st.markdown(f"""
+    render_html(f"""
     <div class="rh-card" style="text-align: center; height: 100%;">
         <div style="display: flex; justify-content: center; margin-bottom: 0.4rem;">{icon_html}</div>
         <div class="metric-value" style="color: {color};">{value}</div>
         <div class="metric-label">{label}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def info_card(title: str, content: str, icon_key: str = "brand") -> None:
     """Render a clinical info card."""
     icon_html = get_icon(icon_key, "#64ffda", "18", "18") if icon_key else ""
-    st.markdown(f"""
+    render_html(f"""
     <div class="rh-card">
         <div style="font-weight: 700; color: #FFFFFF; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.5rem;">
             <span>{icon_html}</span>
@@ -32,7 +33,7 @@ def info_card(title: str, content: str, icon_key: str = "brand") -> None:
         </div>
         <div style="color: #8A94A6; font-size: 0.88rem; line-height: 1.6;">{content}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def status_badge(text: str, status: str = "info") -> None:
@@ -44,7 +45,7 @@ def status_badge(text: str, status: str = "info") -> None:
         "info": ("rgba(100, 255, 218, 0.08)", "#64ffda", "rgba(100, 255, 218, 0.25)"),
     }
     bg, fg, border = palette.get(status, palette["info"])
-    st.markdown(f"""
+    render_html(f"""
     <span style="
         background: {bg};
         color: {fg};
@@ -55,7 +56,7 @@ def status_badge(text: str, status: str = "info") -> None:
         font-weight: 600;
         letter-spacing: 0.04em;
     ">{text}</span>
-    """, unsafe_allow_html=True)
+    """)
 
 
 def detection_table(detections: List[Dict], class_colors: Dict = None) -> None:
@@ -82,12 +83,11 @@ def patient_summary(details: Dict) -> None:
         parts.append(f"ID: `{details['patient_id']}`")
 
     if parts:
-        st.markdown(
+        render_html(
             f"<div class='rh-card' style='padding: 0.6rem 0.9rem; margin-bottom: 0.6rem;'>"
             f"<span style='color: #64ffda; font-weight: 600; font-size: 0.8rem; margin-right: 0.5rem;'>PATIENT RECORD:</span>"
             f"<span style='color: #e8edf3; font-size: 0.85rem;'>{' · '.join(parts)}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
+            f"</div>"
         )
     else:
         st.caption("No patient details entered")

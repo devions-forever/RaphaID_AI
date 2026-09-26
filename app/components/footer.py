@@ -2,11 +2,24 @@
 Footer Component — Session/Metrics/Analytics Panels (flat, icon-based).
 """
 
-import streamlit as st
 from datetime import datetime
 from typing import Dict, Any
 
+import streamlit as st
+
+from app.components.htmlkit import render_html
 from app.components.icons import get_icon
+
+
+def _panel(title: str, icon_key: str, rows: str) -> None:
+    """One footer panel: icon + title heading followed by a label/value list."""
+    render_html(
+        f"{get_icon(icon_key, '#64ffda', '16', '16')} "
+        "<span style='font-weight:700;color:#e8edf3;font-size:0.9rem;'>" + title + "</span>"
+    )
+    render_html(
+        "<div style='font-size:0.85rem;color:#8a94a6;line-height:1.9;'>" + rows + "</div>"
+    )
 
 
 def render_footer(
@@ -25,68 +38,49 @@ def render_footer(
 
     st.markdown("---")
 
-    # Footer panels
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown(
-            f"{get_icon('dashboard', '#64ffda', '16', '16')} "
-            "<span style='font-weight:700;color:#e8edf3;'>Session Info</span>",
-            unsafe_allow_html=True,
+        metrics_rows = (
+            f"<div><strong>Session ID:</strong> {str(session_data.get('session_id', 'N/A'))[:8]}</div>"
+            f"<div><strong>Started:</strong> {session_data.get('start_time', datetime.now().strftime('%H:%M:%S'))}</div>"
+            f"<div><strong>Module:</strong> {str(session_data.get('current_module', 'dashboard')).title()}</div>"
+            f"<div><strong>Analyses:</strong> {session_data.get('analysis_count', 0)}</div>"
         )
-        st.markdown(f"""
-        <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
-            <div><strong>Session ID:</strong> {session_data.get('session_id', 'N/A')[:8]}</div>
-            <div><strong>Started:</strong> {session_data.get('start_time', datetime.now().strftime('%H:%M:%S'))}</div>
-            <div><strong>Module:</strong> {session_data.get('current_module', 'dashboard').title()}</div>
-            <div><strong>Analyses:</strong> {session_data.get('analysis_count', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        _panel("Session Info", "dashboard", metrics_rows)
 
     with col2:
-        st.markdown(
-            f"{get_icon('memory', '#64FFDA', '16', '16')} "
-            "<span style='font-weight:700;color:#E8EDF3;'>Quick Metrics</span>",
-            unsafe_allow_html=True,
-        )
         metrics = session_data.get("metrics", {})
-        st.markdown(f"""
-        <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
-            <div><strong>Total Detections:</strong> {metrics.get('total_detections', 0)}</div>
-            <div><strong>Positive Cases:</strong> {metrics.get('positive_cases', 0)}</div>
-            <div><strong>Verifications:</strong> {metrics.get('verifications', 0)}</div>
-            <div><strong>Reports:</strong> {metrics.get('reports_generated', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        metric_rows = (
+            f"<div><strong>Total Detections:</strong> {metrics.get('total_detections', 0)}</div>"
+            f"<div><strong>Positive Cases:</strong> {metrics.get('positive_cases', 0)}</div>"
+            f"<div><strong>Verifications:</strong> {metrics.get('verifications', 0)}</div>"
+            f"<div><strong>Reports:</strong> {metrics.get('reports_generated', 0)}</div>"
+        )
+        _panel("Quick Metrics", "memory", metric_rows)
 
     with col3:
         if show_analytics:
-            st.markdown(
-                f"{get_icon('magnifying_glass_chart', '#64FFDA', '16', '16')} "
-                "<span style='font-weight:700;color:#E8EDF3;'>Analytics</span>",
-                unsafe_allow_html=True,
-            )
             analytics = session_data.get("analytics", {})
-            st.markdown(f"""
-            <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
-                <div><strong>Malaria:</strong> {analytics.get('malaria', 0)} scans</div>
-                <div><strong>Sickle Cell:</strong> {analytics.get('sickle_cell', 0)} scans</div>
-                <div><strong>ALL:</strong> {analytics.get('all', 0)} scans</div>
-                <div><strong>Iron Def:</strong> {analytics.get('iron_deficiency', 0)} scans</div>
-                <div><strong>MRI:</strong> {analytics.get('mri', 0)} scans</div>
-                <div><strong>CT:</strong> {analytics.get('ct', 0)} scans</div>
-                <div><strong>X-ray:</strong> {analytics.get('xray', 0)} scans</div>
-            </div>
-            """, unsafe_allow_html=True)
+            analytics_rows = "".join(
+                f"<div><strong>{label}:</strong> {analytics.get(key, 0)} scans</div>"
+                for key, label in (
+                    ("malaria", "Malaria"),
+                    ("sickle_cell", "Sickle Cell"),
+                    ("all", "ALL"),
+                    ("iron_deficiency", "Iron Def"),
+                    ("mri", "MRI"),
+                    ("ct", "CT"),
+                    ("xray", "X-ray"),
+                )
+            )
+            _panel("Analytics", "magnifying_glass_chart", analytics_rows)
 
-    # Copyright
-    st.markdown(
+    render_html(
         "<div class='footer-credit'>"
-        "RaphaID AI v1.0 &nbsp;·&nbsp; CPU-only &nbsp;·&nbsp; Fully offline<br>"
-        "Built by Team Devions &nbsp;·&nbsp; "
-        "NACOS UI × DATICAN Competition 2026"
-        "</div>",
-        unsafe_allow_html=True
+        "RaphaID AI v1.0 &nbsp;&middot;&nbsp; CPU-only &nbsp;&middot;&nbsp; Fully offline<br>"
+        "Built by Team Devions &nbsp;&middot;&nbsp; NACOS UI &times; DATICAN Competition 2026"
+        "</div>"
     )
 
 
@@ -124,7 +118,6 @@ def update_session_metrics(module: str, result: Dict = None) -> None:
         if result.get("positive", False):
             session["metrics"]["positive_cases"] += 1
 
-    # Update module-specific analytics (radiology kept separate from detection)
     module_map = {
         "malaria": "malaria",
         "sickle_cell": "sickle_cell",

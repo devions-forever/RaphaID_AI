@@ -11,6 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from app.components.icons import get_icon
+from app.components.htmlkit import render_html
 
 
 # Expected weight files per submodule (must match streamlit_app MODEL_PATHS).
@@ -73,7 +74,7 @@ def readiness_strip(status: dict[str, dict] | None = None) -> tuple[int, int]:
             f'<span style="width:7px;height:7px;border-radius:50%;background:{dot};"></span>'
             f'{labels.get(key, key)} · {state}</span>'
         )
-    st.markdown(
+    render_html(
         "<div style='background:#111a2e;border:1px solid #1f2d44;border-radius:10px;"
         "padding:.8rem 1rem;margin-bottom:1rem;'>"
         f"<div style='font-size:.72rem;color:#8a94a6;text-transform:uppercase;"
@@ -82,31 +83,39 @@ def readiness_strip(status: dict[str, dict] | None = None) -> tuple[int, int]:
         "<div style='font-size:.76rem;color:#5c6779;margin-top:.4rem;'>"
         "Pending modules show sample UI and precise weight paths. No dummy results are generated."
         "</div></div>",
-        unsafe_allow_html=True,
     )
     return ready, total
 
 
 def metric_card(label: str, value: str, icon_key: str = "dashboard") -> None:
-    st.markdown(
+    render_html(
         "<div class='rh-card' style='text-align:center;'>"
         f"<div style='color:#64ffda;margin-bottom:.4rem;'>{get_icon(icon_key, '#64ffda', '24', '24')}</div>"
         f"<div style='font-size:1.6rem;font-weight:800;color:#e8edf3;'>{value}</div>"
         f"<div style='font-size:.7rem;color:#8a94a6;text-transform:uppercase;"
         f"letter-spacing:.08em;margin-top:.3rem;'>{label}</div>"
         "</div>",
-        unsafe_allow_html=True,
+    )
+
+
+def kpi_card(label: str, value: str, icon_key: str = "dashboard", accent: str = "#64ffda") -> None:
+    """Compact KPI tile — lighter and denser than metric_card for dashboard grids."""
+    render_html(
+        "<div class='rh-kpi'>"
+        f"<div style='color:{accent};margin-bottom:.3rem;'>{get_icon(icon_key, accent, '20', '20')}</div>"
+        f"<div class='rh-kpi-value' style='color:{accent};'>{value}</div>"
+        f"<div class='rh-kpi-label'>{label}</div>"
+        "</div>",
     )
 
 
 def info_card(title: str, content: str, icon_key: str = "dashboard") -> None:
-    st.markdown(
+    render_html(
         "<div class='rh-card'>"
         f"<div style='font-weight:700;color:#e8edf3;margin-bottom:.4rem;display:flex;"
         f"align-items:center;gap:.5rem;'>{get_icon(icon_key, '#64ffda', '18', '18')}{title}</div>"
         f"<div style='color:#8a94a6;font-size:.88rem;'>{content}</div>"
         "</div>",
-        unsafe_allow_html=True,
     )
 
 
@@ -127,18 +136,17 @@ def callout(message: str, detail: str = "", kind: str = "info") -> None:
         if detail
         else ""
     )
-    st.markdown(
+    render_html(
         "<div class='rh-card' style='border-left:3px solid "
         f"{accent};margin:1rem 0;'>"
         f"<div style='font-weight:700;color:#e8edf3;'>{message}</div>"
         f"{detail_html}</div>",
-        unsafe_allow_html=True,
     )
 
 
 
 def missing_model_banner(submodule: str, expected_path: str) -> None:
-    st.markdown(
+    render_html(
         "<div style='background:#111a2e;border:1px solid #1f2d44;border-left:3px solid #64ffda;"
         "border-radius:0 10px 10px 0;padding:1rem 1.2rem;margin:1rem 0;'>"
         f"<div style='font-weight:700;color:#e8edf3;margin-bottom:.3rem;'>"
@@ -147,7 +155,6 @@ def missing_model_banner(submodule: str, expected_path: str) -> None:
         "module yet. The page layout below is live; inference is disabled until weights arrive.<br>"
         f"Expected file: <code style='color:#64ffda;'>{expected_path}</code></div>"
         "</div>",
-        unsafe_allow_html=True,
     )
 
 
@@ -173,12 +180,11 @@ def workflow_stepper(steps: list[str], active: int) -> None:
             f'<span style="width:8px;height:8px;border-radius:50%;background:{dot};"></span>'
             f"{i + 1}. {label}</span>"
         )
-    st.markdown(
+    render_html(
         '<div class="rh-stepper" style="display:flex;flex-wrap:wrap;gap:.9rem;'
         'align-items:center;margin-bottom:1rem;">'
         + '<span style="color:#5c6779;">&rarr;</span>'.join(parts)
         + "</div>",
-        unsafe_allow_html=True,
     )
 
 
@@ -202,10 +208,9 @@ def quality_card(quality: dict) -> None:
         )
     if not issues_html:
         issues_html = '<div style="font-size:.8rem;color:#5c6779;margin-top:.25rem;">No blur, exposure or saturation issues detected.</div>'
-    st.markdown(
+    render_html(
         f'<div class="rh-card" style="border-left:3px solid {accent};">'
         f'<div style="font-weight:700;color:#e8edf3;">{title}</div>'
         f'<div style="font-size:.78rem;color:#8a94a6;">{state}</div>'
         f"{issues_html}</div>",
-        unsafe_allow_html=True,
     )

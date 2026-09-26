@@ -1,9 +1,10 @@
 [theme]
 base = "dark"
+# Locked RaphaID clinical palette — must mirror app/components/theme.py
 primaryColor = "#64ffda"
-backgroundColor = "#0d0d1a"
-secondaryBackgroundColor = "#16213e"
-textColor = "#D8DEE9"
+backgroundColor = "#0a0f1d"
+secondaryBackgroundColor = "#111a2e"
+textColor = "#e8edf3"
 font = "sans serif"
 
 [client]

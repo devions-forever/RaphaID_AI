@@ -83,6 +83,7 @@ _splash.step(34, "Loading imaging and data libraries...")
 from app.components.theme import apply_theme, get_theme_colors
 from app.components.navigation import render_navigation
 from app.components.footer import render_footer, update_session_metrics
+from app.components.htmlkit import render_html
 
 _splash.step(46, "Applying clinical interface theme...")
 
@@ -267,7 +268,7 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
         return
 
     from app.components.icons import get_icon
-    st.markdown(f"### {get_icon('magnifying_glass_chart', '#64ffda', '20', '20')} {title}", unsafe_allow_html=True)
+    render_html(f"### {get_icon('magnifying_glass_chart', '#64ffda', '20', '20')} {title}")
     st.caption("Zoomed crops for visual verification")
 
     img_h, img_w = image_bgr.shape[:2]
@@ -315,7 +316,7 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
             with cols[i % 4]:
                 st.image(item["image"], use_container_width=True)
                 name = item["class_name"].replace("_", " ").title()
-                st.markdown(f"**{name}**")
+                render_html(f"**{name}**")
                 st.caption(f"Conf: {item['confidence']:.1%}")
                 if item["is_uncertain"]:
                     st.caption(f"{get_icon('warning', '#FFD700', '14', '14')} Needs review")
@@ -697,7 +698,7 @@ def _render_radiology_module(submodule: str):
                 "Bits stored": str(getattr(ds, "BitsStored", "?")),
                 "Patient ID": str(getattr(ds, "PatientID", "N/A"))[:24],
             }
-            st.markdown(
+            render_html(
                 "<div class='rh-card' style='border-left:3px solid #64ffda;'>"
                 "<div style='font-weight:700;color:#e8edf3;margin-bottom:.3rem;'>DICOM header</div>"
                 + "".join(
@@ -705,7 +706,6 @@ def _render_radiology_module(submodule: str):
                     for k, v in dicom_meta.items()
                 )
                 + "</div>",
-                unsafe_allow_html=True,
             )
         else:
             file_bytes = np.frombuffer(uploaded.read(), np.uint8)
@@ -796,11 +796,10 @@ def _render_radiology_module(submodule: str):
                 f"color:#64ffda;font-weight:700;'>{v}</td></tr>"
                 for k, v in counts.items()
             )
-            st.markdown(
+            render_html(
                 "<table class='detection-table'>"
                 "<tr><th>Class</th><th style='text-align:right;'>Count</th></tr>"
                 f"{rows}</table>",
-                unsafe_allow_html=True,
             )
 
         # Downloads — radiology keeps real PDF/CSV/image exports.
@@ -839,7 +838,29 @@ def _render_dashboard():
     from app.components.icons import get_icon
 
     brand_emblem = get_icon("brand", "#64ffda", "36", "36")
-    st.markdown(f"""
+
+    from app.components.status import readiness_strip, check_model_status
+    _status = check_model_status()
+    _ready = sum(1 for v in _status.values() if v.get("ready"))
+    _total = len(_status) or 1
+    _kb_dir = Path(__file__).resolve().parent.parent / "data" / "medical_knowledge"
+    _kb_files = (
+        len(list(_kb_dir.glob("*.md"))) + len(list(_kb_dir.glob("*.txt")))
+        if _kb_dir.exists()
+        else 0
+    )
+
+    def _health_pill(label: str, ok: bool, detail: str) -> str:
+        color = "#64ffda" if ok else "#8a94a6"
+        return (
+            f'<span style="display:inline-flex; align-items:center; gap:6px; font-size:0.72rem; '
+            f'color:{color}; border:1px solid {color}55; background:{color}12; border-radius:999px; '
+            f'padding:3px 10px; margin:0 4px 4px 0; white-space:nowrap;">'
+            f'<span style="width:6px; height:6px; border-radius:50%; background:{color};"></span>'
+            f'{label} <span style="color:#8a94a6;">· {detail}</span></span>'
+        )
+
+    render_html(f"""
     <div class="rh-hero">
         <div style="display: inline-flex; align-items: center; justify-content: center;
                     width: 54px; height: 54px; border-radius: 14px;
@@ -853,28 +874,31 @@ def _render_dashboard():
         <p style="color: #8A94A6; margin: 0 0 0.6rem 0; font-size: 0.95rem;">
             Offline Multi-Disease Diagnostic Decision-Support Platform
         </p>
-        <p style="margin: 0.4rem 0 0 0;">
+        <p style="margin: 0.4rem 0 0.75rem 0;">
             <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">Air-Gapped Local</span>
             <span class="rh-badge">CPU-Only Inference</span>
             <span class="rh-badge">WHO Severity Protocol</span>
             <span class="rh-badge">Human-in-the-Loop</span>
         </p>
+        <div style="border-top:1px solid #1f2d44; padding-top:0.7rem; margin-top:0.2rem;">
+            {_health_pill("Platform", True, "Operational")}
+            {_health_pill("Inference weights", _ready == _total, f"{_ready}/{_total} ready")}
+            {_health_pill("Knowledge base", _kb_files > 0, f"{_kb_files} documents")}
+            {_health_pill("Network", True, "Air-gapped")}
+        </div>
         <p style="color: #5C6779; margin: 0.6rem 0 0 0; font-size: 0.76rem;">
-            YOLOv8n Neural Detection · Radiographic Analysis · Clinical PDF & CSV Telemetry
+            YOLOv8n Neural Detection · Radiographic Analysis · Clinical PDF &amp; CSV Telemetry
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-    from app.components.status import readiness_strip, check_model_status
-    _status = check_model_status()
     readiness_strip(_status)
 
     # Quick actions — unified action cards with integrated buttons (clean clinical alignment)
-    st.markdown("### Clinical Modules & Workflows")
+    render_html("### Clinical Modules & Workflows")
     det_ready = _status.get("malaria", {}).get("ready", False)
     rad_ready = any(_status.get(k, {}).get("ready", False) for k in ("mri", "ct", "xray"))
-    kb_dir = Path(__file__).resolve().parent.parent / "data" / "medical_knowledge"
-    kb_ready = kb_dir.exists() and (any(kb_dir.glob("*.md")) | any(kb_dir.glob("*.txt"))) if kb_dir.exists() else False
+    kb_ready = _kb_files > 0
 
     actions = [
         ("detection", "Blood Pathology", "Microscopy detection for Malaria, Sickle Cell, ALL, and Iron Deficiency.",
@@ -898,7 +922,7 @@ def _render_dashboard():
                 if is_ready else
                 "color:#8a94a6; border-color:#1f2d44; background:rgba(255,255,255,0.02);"
             )
-            st.markdown(
+            render_html(
                 f"""<div class='rh-card' style='text-align:center; min-height: 200px; display:flex; flex-direction:column; justify-content:space-between;'>
                     <div>
                         <div style='color:#64ffda; margin-bottom:.5rem;'>{get_icon(icon, '#64ffda', '30', '30')}</div>
@@ -909,7 +933,6 @@ def _render_dashboard():
                         <span class='rh-badge' style='{status_chip_style}'>{badge}</span>
                     </div>
                 </div>""",
-                unsafe_allow_html=True,
             )
             if st.button(
                 btn_text,
@@ -939,14 +962,12 @@ def _render_dashboard():
         cols = st.columns(4)
         for col, (icon, label, value) in zip(cols, facts[row_start:row_start + 4]):
             with col:
-                st.markdown(
-                    f"""<div class='rh-card' style='text-align:center; padding:.85rem;'>
-                        <div style='color:#64ffda;'>{get_icon(icon, '#64ffda', '24', '24')}</div>
-                        <div style='font-size:.68rem; color:#8a94a6; text-transform:uppercase;
-                        letter-spacing:.08em; margin-top:.35rem;'>{label}</div>
-                        <div style='font-size:.95rem; font-weight:700; color:#FFFFFF; margin-top:.2rem;'>{value}</div>
+                render_html(
+                    f"""<div class='rh-kpi'>
+                        <div style='color:#64ffda;'>{get_icon(icon, '#64ffda', '22', '22')}</div>
+                        <div class='rh-kpi-label' style='margin-top:.45rem;'>{label}</div>
+                        <div style='font-size:.95rem; font-weight:700; color:#FFFFFF; margin-top:.15rem;'>{value}</div>
                     </div>""",
-                    unsafe_allow_html=True,
                 )
 
     # Recent activity this session (honest — reads real session state only)
@@ -954,16 +975,16 @@ def _render_dashboard():
     session = st.session_state.get("session_data", {})
     analyses = session.get("analysis_count", 0)
     metrics = session.get("metrics", {})
+    from app.components.status import kpi_card
     a1, a2, a3, a4 = st.columns(4)
     with a1:
-        from app.components.status import metric_card
-        metric_card("Analyses This Session", str(analyses), "magnifying_glass_chart")
+        kpi_card("Analyses This Session", str(analyses), "magnifying_glass_chart")
     with a2:
-        metric_card("Total Detections", str(metrics.get("total_detections", 0)), "detection")
+        kpi_card("Total Detections", str(metrics.get("total_detections", 0)), "detection")
     with a3:
-        metric_card("Positive Findings", str(metrics.get("positive_cases", 0)), "vial")
+        kpi_card("Positive Findings", str(metrics.get("positive_cases", 0)), "vial")
     with a4:
-        metric_card("Verified Reports", str(metrics.get("reports_generated", 0)), "file_medical")
+        kpi_card("Verified Reports", str(metrics.get("reports_generated", 0)), "file_medical")
 
     # Clinical workflow with accurate medical icons
     st.markdown("### Standard Clinical Workflow")
@@ -986,16 +1007,15 @@ def _render_dashboard():
         if i < len(workflow_steps) - 1:
             workflow_html += '<div style="color:#1f2d44; align-self:center; font-weight:700;">&rarr;</div>'
     workflow_html += "</div>"
-    st.markdown(workflow_html, unsafe_allow_html=True)
+    render_html(workflow_html)
 
     # Clinical Disclaimer
-    st.markdown(
+    render_html(
         """<div class='rh-card' style='border-left: 3px solid #8a94a6; padding: 0.8rem 1rem;'>
             <div style='font-size: 0.8rem; color: #8a94a6; line-height: 1.5;'>
                 <strong style='color: #e8edf3;'>Clinical Notice:</strong> RaphaID AI is designed for medical research and decision support in resource-constrained environments. It is not intended as a replacement for clinical judgment. All automated findings require confirmation by a qualified healthcare professional.
             </div>
         </div>""",
-        unsafe_allow_html=True,
     )
 
     # Footer
@@ -1024,6 +1044,24 @@ def main():
             "time": datetime.now().strftime("%H:%M"),
         },
     }
+
+    # --- Restore the workspace from the URL -------------------------------
+    # A browser refresh starts a brand-new Streamlit session, which would
+    # otherwise drop the clinician back on the dashboard. The active module and
+    # submodule are mirrored into the query string, so the URL alone is enough
+    # to land back on the same page (and makes every page linkable).
+    _VALID_MODULES = ("dashboard", "detection", "radiology", "chatbot")
+    _qp = st.query_params
+    _qp_module = _qp.get("module")
+    if _qp_module in _VALID_MODULES:
+        defaults["current_module"] = _qp_module
+    _qp_sub = _qp.get("sub")
+    if _qp_sub:
+        if _qp_module == "detection" and _qp_sub in DETECTION_SUBMODULES:
+            defaults["detection_submodule"] = _qp_sub
+        elif _qp_module == "radiology" and _qp_sub in RADIOLOGY_SUBMODULES:
+            defaults["radiology_submodule"] = _qp_sub
+
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
@@ -1059,6 +1097,37 @@ def main():
     # Route to module
     module = st.session_state["current_module"]
 
+    # Keep the URL in sync with the active workspace so a refresh restores it.
+    try:
+        if st.query_params.get("module") != module:
+            st.query_params["module"] = module
+        _sub_for_url = (
+            st.session_state.get("detection_submodule")
+            if module == "detection"
+            else st.session_state.get("radiology_submodule")
+            if module == "radiology"
+            else None
+        )
+        if _sub_for_url:
+            if st.query_params.get("sub") != _sub_for_url:
+                st.query_params["sub"] = _sub_for_url
+        elif "sub" in st.query_params:
+            del st.query_params["sub"]
+    except Exception:
+        # Query-param syncing is a convenience; never let it break the app.
+        pass
+
+    # Persistent clinical status bar (facility · clinician · patient · readiness)
+    from app.components.topbar import render_topbar
+    _active_sub = (
+        st.session_state.get("detection_submodule")
+        if module == "detection"
+        else st.session_state.get("radiology_submodule")
+        if module == "radiology"
+        else None
+    )
+    render_topbar(module, _active_sub)
+
     if module == "dashboard":
         _render_dashboard()
 
@@ -1066,7 +1135,7 @@ def main():
         submodule = st.session_state.get("detection_submodule", "malaria")
         from app.components.icons import get_icon
         icon_html = get_icon(submodule, "#64ffda", "26", "26")
-        st.markdown(
+        render_html(
             f"""<div class="rh-hero" style="display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.4rem; margin-bottom:1.1rem; text-align:left;">
                 <div style="display:flex; align-items:center; gap:0.85rem;">
                     <div style="display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:rgba(100,255,218,0.08); border:1px solid rgba(100,255,218,0.25);">
@@ -1081,7 +1150,6 @@ def main():
                     <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">WHO Severity Protocol</span>
                 </div>
             </div>""",
-            unsafe_allow_html=True,
         )
         _render_detection_module(submodule)
 
@@ -1089,7 +1157,7 @@ def main():
         submodule = st.session_state.get("radiology_submodule", "mri")
         from app.components.icons import get_icon
         icon_html = get_icon(submodule, "#64ffda", "26", "26")
-        st.markdown(
+        render_html(
             f"""<div class="rh-hero" style="display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.4rem; margin-bottom:1.1rem; text-align:left;">
                 <div style="display:flex; align-items:center; gap:0.85rem;">
                     <div style="display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:rgba(100,255,218,0.08); border:1px solid rgba(100,255,218,0.25);">
@@ -1104,7 +1172,6 @@ def main():
                     <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">DICOM / Radiography</span>
                 </div>
             </div>""",
-            unsafe_allow_html=True,
         )
         _render_radiology_module(submodule)
 
