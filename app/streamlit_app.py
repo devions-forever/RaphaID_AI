@@ -52,6 +52,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.components.theme import apply_theme, get_theme_colors
 from app.components.navigation import render_navigation
 from app.components.footer import render_footer, update_session_metrics
+from app.components.splash import render_splash_screen
 
 from app.modules.detection import (
     MalariaDetector,
@@ -87,16 +88,16 @@ from src.utils.session_manager import get_session_manager
 # Constants
 # ---------------------------------------------------------------------------
 DETECTION_SUBMODULES = {
-    "malaria": "🦠 Malaria",
-    "sickle_cell": "🩸 Sickle Cell",
-    "all": "🧬 ALL Leukemia",
-    "iron_deficiency": "🩸 Iron Deficiency",
+    "malaria": "Malaria",
+    "sickle_cell": "Sickle Cell",
+    "all": "ALL Leukemia",
+    "iron_deficiency": "Iron Deficiency",
 }
 
 RADIOLOGY_SUBMODULES = {
-    "mri": "🧠 MRI Brain",
-    "ct": "🫁 CT Chest",
-    "xray": "🩻 X-ray Chest",
+    "mri": "MRI Brain",
+    "ct": "CT Chest",
+    "xray": "X-ray Chest",
 }
 
 MODEL_PATHS = {
@@ -669,13 +670,14 @@ def _render_radiology_module(submodule: str):
 def _render_dashboard():
     """Render the main dashboard."""
     colors = get_theme_colors()
+    from app.components.icons import get_icon
 
     st.markdown(f"""
     <div style="background: linear-gradient(135deg, #0d0d1a, #1a1a2e, #0f3460);
                 border-radius: 14px; padding: 1.2rem 1.8rem; margin-bottom: 1rem;
                 border: 1px solid rgba(255,255,255,0.12); text-align: center;">
-        <h2 style="color: #FFFFFF; margin-bottom: 0.2rem; font-size: 1.8rem;">
-           🩺 RaphaID AI
+        <h2 style="color: #FFFFFF; margin-bottom: 0.2rem; font-size: 1.8rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+           {get_icon("dashboard", "#64ffda", "28", "28")} RaphaID AI
         </h2>
         <p style="color: #D8DEE9; margin: 0 0 0.3rem 0; font-size: 0.95rem;">
             Offline Multi-Disease Diagnostic Tool
@@ -686,35 +688,50 @@ def _render_dashboard():
     </div>
     """, unsafe_allow_html=True)
 
-    # Quick actions
-    st.markdown("### 🚀 Quick Actions")
+    # Quick actions - use columns with icon + button
+    st.markdown("### Quick Actions")
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button("🔬 New Malaria Diagnosis", use_container_width=True, type="primary"):
+        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('detection', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
+        if st.button(
+            "New Detection",
+            use_container_width=True, type="primary",
+            help="Start a new blood pathology detection analysis"
+        ):
             st.session_state["current_module"] = "detection"
             st.session_state["detection_submodule"] = "malaria"
             st.rerun()
     with c2:
-        if st.button("🏥 New Radiology Scan", use_container_width=True):
+        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('radiology', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
+        if st.button(
+            "New Radiology Scan",
+            use_container_width=True,
+            help="Start a new radiology imaging analysis"
+        ):
             st.session_state["current_module"] = "radiology"
             st.session_state["radiology_submodule"] = "mri"
             st.rerun()
     with c3:
-        if st.button("🤖 Medical Assistant", use_container_width=True):
+        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('chatbot', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
+        if st.button(
+            "Medical Assistant",
+            use_container_width=True,
+            help="Open the AI medical assistant chatbot"
+        ):
             st.session_state["current_module"] = "chatbot"
             st.rerun()
 
-    # Quick facts
-    st.markdown("### 📋 Quick Facts")
+    # Quick facts with medical icons
+    st.markdown("### Quick Facts")
     facts = [
-        ("🧠", "Models", "YOLOv8n (quantized)"),
-        ("🦠", "Detection", "4 Diseases"),
-        ("🏥", "Radiology", "3 Modalities"),
-        ("🤖", "Chatbot", "RAG + LangGraph"),
-        ("⚡", "Inference", "< 500ms CPU"),
-        ("💾", "RAM Target", "< 6GB"),
-        ("🔒", "Offline", "Fully Air-gapped"),
-        ("📄", "Reports", "PDF + CSV"),
+        ("microchip", "Models", "YOLOv8n (quantized)"),
+        ("bacterium", "Detection", "4 Diseases"),
+        ("xray_icon", "Radiology", "3 Modalities"),
+        ("robot", "Chatbot", "RAG + LangGraph"),
+        ("bolt", "Inference", "< 500ms CPU"),
+        ("memory", "RAM Target", "< 6GB"),
+        ("shield", "Offline", "Fully Air-gapped"),
+        ("file_medical", "Reports", "PDF + CSV"),
     ]
     for row_start in range(0, len(facts), 4):
         cols = st.columns(4)
@@ -723,48 +740,33 @@ def _render_dashboard():
                 st.markdown(f"""
                 <div style="background: #16213e; border: 1px solid rgba(255,255,255,0.12);
                             border-radius: 10px; padding: 0.8rem; text-align: center;">
-                    <div style="font-size: 1.3rem;">{icon}</div>
+                    <div style="font-size: 1.5rem; color: #64ffda;">{get_icon(icon, "#64ffda", "28", "28")}</div>
                     <div style="font-size: 0.68rem; color: #9AA4B2; text-transform: uppercase; margin-top: 0.35rem;">{label}</div>
                     <div style="font-size: 1rem; font-weight: 700; color: #FFFFFF; margin-top: 0.25rem;">{value}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-    # Clinical workflow
-    st.markdown("### 🔄 Clinical Workflow")
-    st.markdown("""
-    <div style="background: #16213e; border: 1px solid rgba(255,255,255,0.12);
-                border-radius: 12px; padding: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">
+    # Clinical workflow with medical icons
+    st.markdown("### Clinical Workflow")
+    workflow_steps = [
+        ("vial", "Upload", "Sample/Image"),
+        ("magnifying_glass_chart", "Quality", "Auto-Check"),
+        ("brain", "Detect", "AI Inference"),
+        ("user_doctor", "Verify", "Clinician Review"),
+        ("file_medical_2", "Report", "PDF/CSV Export"),
+    ]
+    workflow_html = '<div style="background: #16213e; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">'
+    for i, (icon, title, desc) in enumerate(workflow_steps):
+        workflow_html += f'''
         <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem;">🧫</div>
-            <div style="font-weight: 600;">Upload</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">Sample/Image</div>
-        </div>
-        <div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>
-        <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem;">🔍</div>
-            <div style="font-weight: 600;">Quality</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">Auto-Check</div>
-        </div>
-        <div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>
-        <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem;">🧠</div>
-            <div style="font-weight: 600;">Detect</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">AI Inference</div>
-        </div>
-        <div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>
-        <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem;">👨‍⚕️</div>
-            <div style="font-weight: 600;">Verify</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">Clinician Review</div>
-        </div>
-        <div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>
-        <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem;">📄</div>
-            <div style="font-weight: 600;">Report</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">PDF/CSV Export</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+            <div style="font-size: 1.5rem; color: #64ffda;">{get_icon(icon, "#64ffda", "28", "28")}</div>
+            <div style="font-weight: 600;">{title}</div>
+            <div style="font-size: 0.75rem; color: #9AA4B2;">{desc}</div>
+        </div>'''
+        if i < len(workflow_steps) - 1:
+            workflow_html += '<div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>'
+    workflow_html += '</div>'
+    st.markdown(workflow_html, unsafe_allow_html=True)
 
     # Disclaimer
     st.warning(
@@ -788,6 +790,10 @@ def main():
 
     # Apply theme
     apply_theme()
+
+    # Show splash screen on first load (5 seconds)
+    if "splash_shown" not in st.session_state:
+        render_splash_screen(duration=5.0)
 
     # Session state initialization
     defaults = {
@@ -822,8 +828,16 @@ def main():
         st.session_state["current_module"] = module
         st.session_state.session_data["current_module"] = module
 
-    # Render sidebar navigation
-    render_navigation(st.session_state["current_module"], on_module_change)
+    def on_home_click():
+        """Callback when home button is clicked."""
+        pass  # State is handled in navigation component
+
+    # Render sidebar navigation with home button
+    render_navigation(
+        st.session_state["current_module"], 
+        on_module_change,
+        on_home_click=on_home_click
+    )
 
     # Route to module
     module = st.session_state["current_module"]
@@ -833,12 +847,16 @@ def main():
 
     elif module == "detection":
         submodule = st.session_state.get("detection_submodule", "malaria")
-        st.markdown(f"### {DETECTION_SUBMODULES[submodule]} Detection")
+        from app.components.icons import get_icon
+        icon_html = get_icon(submodule, "#64ffda", "22", "22")
+        st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
         _render_detection_module(submodule)
 
     elif module == "radiology":
         submodule = st.session_state.get("radiology_submodule", "mri")
-        st.markdown(f"### {RADIOLOGY_SUBMODULES[submodule]} Analysis")
+        from app.components.icons import get_icon
+        icon_html = get_icon(submodule, "#64ffda", "22", "22")
+        st.markdown(f'### {icon_html} {RADIOLOGY_SUBMODULES[submodule]} Analysis', unsafe_allow_html=True)
         _render_radiology_module(submodule)
 
     elif module == "chatbot":
