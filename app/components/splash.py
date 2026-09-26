@@ -2,7 +2,7 @@
 Splash Screen Component — RaphaID AI Clinical Boot Screen
 
 Renders ONE self-animating, full-screen medical boot overlay using pure CSS
-keyframes. No JavaScript, no CDN, no external assets — safe for air-gapped use.
+keyframes. No JavaScript, no CDN, no external assets — safe for air-gapped use. Flat solid colours only (single accent, no gradients).
 
 Why single-shot rendering:
     Streamlit strips <script> tags from injected HTML. The previous version
@@ -18,9 +18,11 @@ import time
 # ---------------------------------------------------------------------------
 # Palette — mirrors app/components/theme.py
 # ---------------------------------------------------------------------------
-_TEAL = "#64ffda"
-_EMERALD = "#4ade80"
-_CYAN = "#38bdf8"
+# Single brand accent on deep navy — flat solids only, no gradients.
+_ACCENT = "#64ffda"
+_TEAL = _ACCENT
+_EMERALD = _ACCENT  # unified (was #4ade80)
+_CYAN = _ACCENT  # unified (was #38bdf8)
 _BG_DARK = "#0a0f1d"
 _BG_MID = "#111936"
 _TEXT = "#f1f5f9"
@@ -56,13 +58,24 @@ _ASSISTANT_PATHS = (
 )
 
 
-def _build_splash_html(duration: float = 4.0) -> str:
+def _build_splash_html(progress: int = 0, status: str = "Booting clinical AI platform...", duration: float = 4.0) -> str:
     """
     Build the full splash overlay as a single-line HTML string.
 
     Every element is animated with CSS keyframes so no JavaScript is required.
-    The progress bar auto-fills over `duration` seconds via CSS animation.
+
+    Args:
+        progress: Percentage (0-100) shown in the label and the progress bar.
+        status:   Human-readable boot stage shown under the bar.
+        duration: Seconds per ECG sweep cycle.
     """
+    progress = max(0, min(int(progress), 100))
+    status = (
+        str(status)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
     # Heartbeat trace reused twice: a dim static guide + a bright animated sweep
     ecg_d = (
         "M0 20 L62 20 L74 12 L84 28 L94 20 L118 20 L130 4 L142 36 L153 11 "
@@ -72,9 +85,8 @@ def _build_splash_html(duration: float = 4.0) -> str:
     css = (
         "<style>"
         # Orb glow pulse
-        "@keyframes rpOrb{0%,100%{transform:scale(1);filter:drop-shadow(0 0 22px rgba(100,255,218,.35));}"
-        "50%{transform:scale(1.06);filter:drop-shadow(0 0 44px rgba(100,255,218,.75))"
-        " drop-shadow(0 0 80px rgba(56,189,248,.35));}}"
+        "@keyframes rpOrb{0%,100%{transform:scale(1);filter:drop-shadow(0 0 20px rgba(100,255,218,.30));}"
+        "50%{transform:scale(1.06);filter:drop-shadow(0 0 44px rgba(100,255,218,.55));}}"
         # Rotating dashed scan ring
         "@keyframes rpSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}"
         # Counter-rotating inner ring
@@ -104,11 +116,11 @@ def _build_splash_html(duration: float = 4.0) -> str:
         'animation:rpSpin 22s linear infinite;"></div>'
         # inner solid ring, counter-rotating
         f'<div style="position:absolute;inset:-2px;border-radius:50%;'
-        f'border:2px solid rgba(56,189,248,.30);border-top-color:{_CYAN};'
+        f'border:2px solid rgba(100,255,218,.30);border-top-color:{_CYAN};'
         'animation:rpSpinRev 6s linear infinite;"></div>'
         # core orb
         f'<div style="width:106px;height:106px;border-radius:50%;'
-        f'background:linear-gradient(135deg,rgba(16,185,129,.28),rgba(6,182,212,.30));'
+        f'background:#12253a;'
         f'border:2px solid {_TEAL};display:flex;align-items:center;justify-content:center;'
         'animation:rpOrb 2.6s ease-in-out infinite;">'
         f'{_icon(_ECG_PATHS, _TEAL, 52, 2.2)}'
@@ -118,15 +130,15 @@ def _build_splash_html(duration: float = 4.0) -> str:
     title = (
         f'<h1 style="margin:0 0 6px 0;font-size:2.4rem;font-weight:800;letter-spacing:-.02em;'
         f'color:{_TEXT};text-align:center;animation:rpRise .7s ease-out .1s both;">RaphaID '
-        f'<span style="background:linear-gradient(135deg,{_TEAL},{_CYAN});'
-        f'-webkit-background-clip:text;-webkit-text-fill-color:transparent;">AI</span></h1>'
+        f'<span style="color:#64ffda;'
+        f'">AI</span></h1>'
     )
 
     subtitle = (
         '<div style="display:flex;align-items:center;justify-content:center;gap:9px;'
         'margin-bottom:22px;animation:rpRise .7s ease-out .25s both;">'
-        f'<span style="width:7px;height:7px;border-radius:50%;background:{_EMERALD};'
-        f'box-shadow:0 0 9px {_EMERALD};"></span>'
+        f'<span style="width:7px;height:7px;border-radius:50%;background:#64ffda;'
+        f'box-shadow:0 0 9px #64ffda;"></span>'
         f'<span style="color:{_TEAL};font-size:.80rem;font-weight:700;text-transform:uppercase;'
         'letter-spacing:.20em;">Offline Multi-Disease Clinical Diagnostic Suite</span>'
         '</div>'
@@ -139,14 +151,11 @@ def _build_splash_html(duration: float = 4.0) -> str:
         'xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">'
         f'<path d="{ecg_d}" stroke="rgba(100,255,218,.16)" stroke-width="2" '
         'stroke-linecap="round" stroke-linejoin="round"/>'
-        f'<path d="{ecg_d}" stroke="url(#rpEcgGrad)" stroke-width="2.6" '
+        f'<path d="{ecg_d}" stroke="#64ffda" stroke-width="2.6" '
         'stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="150 750" '
         f'style="animation:rpEcg {duration}s linear infinite;"/>'
-        '<defs><linearGradient id="rpEcgGrad" x1="0%" y1="0%" x2="100%" y2="0%">'
-        f'<stop offset="0%" stop-color="{_TEAL}" stop-opacity="0"/>'
-        f'<stop offset="45%" stop-color="{_TEAL}" stop-opacity="1"/>'
-        f'<stop offset="100%" stop-color="{_EMERALD}" stop-opacity="1"/>'
-        '</linearGradient></defs></svg></div>'
+        ''
+        '</svg></div>'
     )
 
     def chip(paths, colour, label, detail, delay):
@@ -166,38 +175,38 @@ def _build_splash_html(duration: float = 4.0) -> str:
         '<div style="display:flex;gap:12px;margin-bottom:26px;max-width:92vw;flex-wrap:wrap;'
         'justify-content:center;">'
         + chip(_MICROSCOPE_PATHS, _TEAL, "Blood Microscopy", "Malaria &middot; Sickle Cell &middot; ALL", ".55")
-        + chip(_SCAN_PATHS, _CYAN, "Radiology AI", "MRI &middot; CT &middot; X-Ray", ".70")
-        + chip(_ASSISTANT_PATHS, _EMERALD, "Clinical Assistant", "RAG &middot; WHO Guidelines", ".85")
+        + chip(_SCAN_PATHS, _TEAL, "Radiology AI", "MRI &middot; CT &middot; X-Ray", ".70")
+        + chip(_ASSISTANT_PATHS, _TEAL, "Clinical Assistant", "RAG &middot; WHO Guidelines", ".85")
         + '</div>'
     )
 
-    progress = (
+    progress_block = (
         '<div style="width:392px;max-width:88vw;margin-bottom:10px;'
         'animation:rpRise .7s ease-out 1s both;">'
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">'
         f'<span style="color:{_TEXT_DIM};font-size:.76rem;font-weight:600;">Neural Diagnostic Pipeline</span>'
         f'<span style="color:{_TEAL};font-size:.76rem;font-family:monospace;font-weight:700;">'
-        'INITIALISING</span></div>'
+        f'{progress}%</span></div>'
         '<div style="width:100%;height:8px;background:rgba(35,53,84,.65);border-radius:4px;'
         'overflow:hidden;position:relative;border:1px solid rgba(100,255,218,.18);'
         'box-shadow:inset 0 1px 3px rgba(0,0,0,.6);">'
-        f'<div style="height:100%;border-radius:4px;'
-        f'background:linear-gradient(90deg,{_TEAL},{_CYAN},{_EMERALD});'
-        f'animation:rpFill {duration}s cubic-bezier(.35,.15,.25,1) forwards;'
+        f'<div style="width:{progress}%;height:100%;border-radius:4px;'
+        f'background:#64ffda;'
+        'transition:width .45s cubic-bezier(.35,.15,.25,1);'
         'box-shadow:0 0 14px rgba(100,255,218,.6);"></div>'
         '<div style="position:absolute;top:0;left:0;height:100%;width:80px;'
-        'background:linear-gradient(90deg,transparent,rgba(255,255,255,.42),transparent);'
+        'background:rgba(255,255,255,.35);'
         'animation:rpShimmer 1.8s linear infinite;"></div>'
         '</div></div>'
     )
 
-    status = (
+    status_block = (
         '<div style="display:flex;align-items:center;gap:9px;margin-bottom:26px;min-height:1.35rem;'
         'animation:rpRise .7s ease-out 1.2s both;">'
         f'<span style="width:8px;height:8px;border-radius:50%;background:{_TEAL};'
         'animation:rpBlink 1.3s ease-in-out infinite;"></span>'
         f'<span style="color:{_TEXT};font-size:.86rem;font-weight:500;">'
-        'Initialising clinical AI systems&hellip;</span></div>'
+        f'{status}</span></div>'
     )
 
     badge = (
@@ -221,7 +230,7 @@ def _build_splash_html(duration: float = 4.0) -> str:
         '<div class="raphaid-splash-root" style="position:fixed !important;top:0 !important;'
         'left:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;'
         'height:100vh !important;'
-        f'background:radial-gradient(ellipse at 50% 28%,{_BG_MID} 0%,{_BG_DARK} 68%,#050811 100%) '
+        f'background:#0a0f1d '
         '!important;display:flex !important;flex-direction:column !important;'
         'align-items:center !important;justify-content:center !important;'
         'z-index:2147483000 !important;margin:0 !important;padding:24px !important;'
@@ -231,7 +240,7 @@ def _build_splash_html(duration: float = 4.0) -> str:
 
     html = (
         overlay_open + css + orb + title + subtitle + ecg
-        + chips + progress + status + badge + "</div>"
+        + chips + progress_block + status_block + badge + "</div>"
     )
 
     # Force a single line: the Markdown parser treats 4-space-indented lines as
@@ -239,33 +248,94 @@ def _build_splash_html(duration: float = 4.0) -> str:
     return " ".join(html.split())
 
 
-def render_splash_screen(duration: float = 4.0) -> bool:
+class SplashController:
     """
-    Render the RaphaID AI clinical boot splash screen.
+    Progressive, real-time boot splash.
 
-    Self-guarding: returns immediately if the splash was already shown in this
-    browser session. All animations are pure CSS and auto-complete, so a single
-    render call is enough; the overlay is then removed so the app appears.
+    Paints immediately — before the heavy imports (torch, ultralytics,
+    sentence-transformers, chromadb ...) — so the browser never sits on
+    Streamlit's grey "loading" skeleton during a cold start. The bar then
+    advances at *real* checkpoints as each boot stage finishes.
 
-    Args:
-        duration: Seconds the splash stays on screen.
+    Typical use at the top of a Streamlit entrypoint::
 
-    Returns:
-        True if the splash completed, or was skipped because it already ran.
+        splash = SplashController(min_duration=3.5)
+        splash.start("Booting RaphaID AI...")
+        import torch                      # heavy
+        splash.step(24, "Loading deep learning engine...")
+        ...
+        splash.complete()                 # called from main()
+
+    Safe to call on every rerun: if the splash already played in this browser
+    session, ``start`` returns False and all later calls become no-ops.
     """
-    if st.session_state.get("splash_shown", False):
+
+    def __init__(self, min_duration: float = 3.5, duration: float = 4.0):
+        self._min_duration = float(min_duration)
+        self._duration = float(duration)
+        self._placeholder = None
+        self._started_at = 0.0
+        self._progress = 0
+        self.active = False
+
+    # -- internal ----------------------------------------------------------
+    def _render(self, label: str) -> None:
+        if self._placeholder is None:
+            return
+        self._placeholder.markdown(
+            _build_splash_html(self._progress, label, self._duration),
+            unsafe_allow_html=True,
+        )
+
+    # -- public API --------------------------------------------------------
+    def start(self, label: str = "Booting clinical AI platform...") -> bool:
+        """Paint the splash at once. Returns False if it already played."""
+        if st.session_state.get("splash_shown", False):
+            return False
+
+        self._placeholder = st.empty()
+        self._started_at = time.perf_counter()
+        self._progress = 4
+        self.active = True
+        self._render(label)
         return True
 
-    placeholder = st.empty()
-    try:
-        placeholder.markdown(_build_splash_html(duration), unsafe_allow_html=True)
-        time.sleep(duration)
-    finally:
-        # Always clear the overlay so a mid-boot interruption cannot leave the
-        # app stuck behind a full-screen layer.
-        st.session_state["splash_shown"] = True
-        placeholder.empty()
+    def step(self, progress: int, label: str) -> None:
+        """Advance to a real boot stage. Progress is clamped and monotonic."""
+        if not self.active:
+            return
+        self._progress = max(self._progress, min(int(progress), 99))
+        self._render(label)
 
+    def complete(self, label: str = "Clinical workspace ready") -> None:
+        """Show 100 %, honour the minimum on-screen time, then remove."""
+        if not self.active:
+            return
+        self._progress = 100
+        self._render(label)
+
+        elapsed = time.perf_counter() - self._started_at
+        remaining = self._min_duration - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
+
+        self._placeholder.empty()
+        self._placeholder = None
+        st.session_state["splash_shown"] = True
+        self.active = False
+
+
+def render_splash_screen(duration: float = 4.0) -> bool:
+    """
+    Convenience wrapper: show the splash for a fixed time, then clear it.
+
+    Prefer :class:`SplashController` when you want the bar to track real boot
+    stages. Kept for simple call sites and backwards compatibility.
+    """
+    splash = SplashController(min_duration=duration, duration=duration)
+    if not splash.start():
+        return True
+    splash.complete()
     return True
 
 

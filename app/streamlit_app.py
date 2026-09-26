@@ -1,14 +1,49 @@
 """
 RaphaID AI — Offline Multi-Disease Diagnostic Tool
 Main Streamlit application integrating Detection, Radiology, and Chatbot modules.
+
+Boot order matters here. Streamlit renders nothing until the script yields its
+first element, so the clinical boot splash is painted BEFORE the heavy imports
+(torch, ultralytics, ...). Without this, the browser sits on Streamlit's grey
+loading skeleton for the entire cold start.
 """
+
+import sys
+from pathlib import Path
+
+import streamlit as st
+
+# ---------------------------------------------------------------------------
+# Project root on sys.path so `app.*` and `src.*` resolve.
+# ---------------------------------------------------------------------------
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# set_page_config() must be the very first Streamlit command in the script.
+st.set_page_config(
+    page_title="RaphaID AI",
+    page_icon="🩺",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ---------------------------------------------------------------------------
+# BOOT SPLASH — paint first, import afterwards.
+# Each _splash.step() marks a real boot stage so the bar reflects actual work.
+# ---------------------------------------------------------------------------
+from app.components.splash import SplashController  # noqa: E402
+
+_splash = SplashController(min_duration=3.5, duration=4.0)
+_splash.start("Booting RaphaID AI clinical platform...")
 
 # ---------------------------------------------------------------------------
 # CRITICAL FIX: PyTorch 2.1+ torch.classes compatibility
 # Must be applied BEFORE any torch/ultralytics imports
 # ---------------------------------------------------------------------------
+_splash.step(10, "Initialising neural network runtime...")
 import torch
 import torch._classes as _tc
+
 
 # Monkey patch _ClassNamespace to gracefully handle __path__/__file__ access
 # This prevents: "Tried to instantiate class '__path__.__file__', but it does not exist!"
@@ -27,24 +62,18 @@ def _safe_namespace_getattr(self, attr):
         raise
 
 _tc._ClassNamespace.__getattr__ = _safe_namespace_getattr
+_splash.step(22, "Loading deep learning engine...")
 # ---------------------------------------------------------------------------
 
-import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 import cv2
 import numpy as np
 import pandas as pd
-import streamlit as st
 from PIL import Image
 
-# ---------------------------------------------------------------------------
-# Add project root to path
-# ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+_splash.step(34, "Loading imaging and data libraries...")
 
 # ---------------------------------------------------------------------------
 # Imports from new module structure
@@ -52,7 +81,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from app.components.theme import apply_theme, get_theme_colors
 from app.components.navigation import render_navigation
 from app.components.footer import render_footer, update_session_metrics
-from app.components.splash import render_splash_screen
+
+_splash.step(46, "Applying clinical interface theme...")
 
 from app.modules.detection import (
     MalariaDetector,
@@ -64,6 +94,9 @@ from app.modules.detection import (
     load_all_model,
     load_iron_deficiency_model,
 )
+
+_splash.step(62, "Initialising microscopy detection modules...")
+
 from app.modules.radiology import (
     MRIDetector,
     CTScanDetector,
@@ -72,7 +105,8 @@ from app.modules.radiology import (
     load_ct_model,
     load_xray_model,
 )
-from app.modules.chatbot import render_chatbot_ui
+
+_splash.step(78, "Preparing radiology inference engines...")
 
 from src.utils.quality_check import assess_image_quality
 from src.utils.report_generator import (
@@ -81,7 +115,16 @@ from src.utils.report_generator import (
     generate_xray_report,
     generate_csv_report_radiology,
 )
+
+_splash.step(90, "Loading clinical reporting services...")
+
 from src.utils.session_manager import get_session_manager
+
+_splash.step(96, "Restoring local session store...")
+
+# NOTE: app.modules.chatbot is imported lazily inside main() on purpose —
+# sentence-transformers + chromadb + langchain add roughly half a minute to a
+# cold start, and most sessions never open the assistant.
 
 
 # ---------------------------------------------------------------------------
@@ -780,20 +823,14 @@ def _render_dashboard():
 
 
 def main():
-    # Page config
-    st.set_page_config(
-        page_title="RaphaID AI",
-        page_icon="🩺",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
+    # NOTE: st.set_page_config() already ran at the top of this module, before
+    # the heavy imports, so that the boot splash could paint first.
 
-    # Apply theme
+    # Apply theme before the splash lifts, so the dashboard is styled on reveal.
     apply_theme()
 
-    # Clinical boot splash — self-guarded, renders once per browser session.
-    # Must run before the sidebar/dashboard so the overlay covers the first paint.
-    render_splash_screen(duration=4.0)
+    # Every boot stage is complete — lift the splash and show the app.
+    _splash.complete()
 
     # Session state initialization
     defaults = {
@@ -860,6 +897,10 @@ def main():
         _render_radiology_module(submodule)
 
     elif module == "chatbot":
+        # Imported lazily on purpose: this module pulls in sentence-transformers,
+        # chromadb, langchain and langgraph, which add a large chunk of cold-start
+        # time and are not needed unless the user opens the assistant.
+        from app.modules.chatbot import render_chatbot_ui
         render_chatbot_ui()
 
 
