@@ -6,37 +6,33 @@ import streamlit as st
 
 
 def get_theme_colors() -> dict:
-    """Return the clinical color palette."""
+    """Return the clinical color palette — flat navy + single teal accent."""
     return {
-        # Background
-        "bg_primary": "#0d0d1a",
-        "bg_secondary": "#16213e",
-        "bg_card": "#1a1a2e",
-        "bg_hover": "#1f2a48",
-
+        # Background (locked)
+        "bg_primary": "#0A0F1D",
+        "bg_secondary": "#0D1528",
+        "bg_card": "#111A2E",
+        "bg_hover": "#16213E",
         # Text
-        "text_primary": "#D8DEE9",
-        "text_secondary": "#8892b0",
-        "text_muted": "#6b7280",
-        "text_accent": "#64ffda",
-
-        # Accents
-        "accent_teal": "#64ffda",
-        "accent_emerald": "#4ade80",
-        "accent_red": "#e94560",
-        "accent_orange": "#ff9800",
-        "accent_yellow": "#ffd700",
-        "accent_purple": "#ff00ff",
-
+        "text_primary": "#E8EDF3",
+        "text_secondary": "#8A94A6",
+        "text_muted": "#5C6779",
+        "text_accent": "#64FFDA",
+        # Accents — single teal + safety red only
+        "accent_teal": "#64FFDA",
+        "accent_emerald": "#64FFDA",
+        "accent_red": "#F87171",
+        "accent_orange": "#64FFDA",
+        "accent_yellow": "#64FFDA",
+        "accent_purple": "#8A94A6",
         # Borders
-        "border_subtle": "#233554",
-        "border_accent": "#64ffda",
-
+        "border_subtle": "#1F2D44",
+        "border_accent": "#64FFDA",
         # Status
-        "success": "#4ade80",
-        "warning": "#ffd700",
-        "error": "#f87171",
-        "info": "#64ffda",
+        "success": "#64FFDA",
+        "warning": "#8A94A6",
+        "error": "#F87171",
+        "info": "#64FFDA",
     }
 
 
@@ -69,8 +65,10 @@ def apply_theme() -> None:
         color: #FFFFFF !important;
     }}
 
-    /* Force body text color */
-    p, span, label, div {{
+    /* Keep Streamlit-native text readable; do not force every div/span. */
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] label,
+    .block-container p {{
         color: {colors["text_primary"]};
     }}
 
@@ -346,9 +344,79 @@ def apply_theme() -> None:
         background: {colors["accent_teal"]};
     }}
 
+    /* Shared RaphaID flat cards — dark navy, single teal accent, no gradients. */
+    .rh-hero {{
+        background: #111A2E;
+        border: 1px solid #1F2D44;
+        border-radius: 14px;
+        padding: 1.2rem 1.8rem;
+        margin-bottom: 1rem;
+        text-align: center;
+    }}
+
+    .rh-card {{
+        background: #111A2E;
+        border: 1px solid #1F2D44;
+        border-radius: 10px;
+        padding: 1rem;
+    }}
+
+    .rh-badge {{
+        display: inline-block;
+        border: 1px solid #1F2D44;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 0.72rem;
+        color: #8A94A6;
+        margin: 0 6px 6px 0;
+    }}
+
+    .rh-stepper {{
+        background: #111A2E;
+        border: 1px solid #1F2D44;
+        border-radius: 12px;
+        padding: 0.8rem 1rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        justify-content: space-between;
+        align-items: center;
+    }}
+
+    .rh-step {{
+        flex: 1;
+        min-width: 110px;
+        text-align: center;
+        font-size: 0.8rem;
+        color: #8A94A6;
+    }}
+
+    .rh-step-active {{
+        color: #E8EDF3;
+        font-weight: 700;
+    }}
+
+    .rh-empty {{
+        background: #111A2E;
+        border: 1px solid #1F2D44;
+        border-radius: 12px;
+        padding: 1.6rem 1.2rem;
+        text-align: center;
+        color: #8A94A6;
+    }}
+
+    .rh-pending {{
+        background: #111A2E;
+        border: 1px solid #1F2D44;
+        border-left: 3px solid #64FFDA;
+        border-radius: 0 10px 10px 0;
+        padding: 1rem 1.2rem;
+        margin: 1rem 0;
+    }}
+
     /* Custom component classes */
     .metric-card {{
-        background: linear-gradient(135deg, {colors["bg_card"]}, {colors["bg_secondary"]});
+        background: {colors["bg_card"]};
         border: 1px solid {colors["border_subtle"]};
         border-radius: 12px;
         padding: 1.4rem 1.2rem;

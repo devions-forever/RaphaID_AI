@@ -50,16 +50,16 @@ def render_navigation(
         }
 
     with st.sidebar:
-        # Logo/Brand with medical icon
+        # Brand - flat dark navy, single teal accent
         st.markdown(f"""
         <div style="text-align: center; padding: 1rem 0; margin-bottom: 1rem;
-                    background: linear-gradient(135deg, #0d0d1a, #1a1a2e);
-                    border-radius: 12px; border: 1px solid #233554;">
+                    background: #111a2e;
+                    border-radius: 12px; border: 1px solid #1f2d44;">
             <div style="font-size: 2.5rem; color: #64ffda; display: inline-flex;">{get_icon("dashboard", "#64ffda", "40", "40")}</div>
-            <div style="font-size: 1.3rem; font-weight: 800; color: #64ffda; margin-top: 0.5rem;">
+            <div style="font-size: 1.3rem; font-weight: 800; color: #e8edf3; margin-top: 0.5rem;">
                 RaphaID AI
             </div>
-            <div style="font-size: 0.75rem; color: #8892b0; margin-top: 0.25rem;">
+            <div style="font-size: 0.75rem; color: #8a94a6; margin-top: 0.25rem;">
                 Offline Multi-Disease Diagnostic
             </div>
         </div>
@@ -87,44 +87,52 @@ def render_navigation(
 
         for module_key, module_info in modules.items():
             is_active = module_key == current_module
-            icon_color = "#64ffda" if is_active else "#8892b0"
-            
-            # Render button with inline SVG icon
-            icon_html = get_icon(module_info['icon'], icon_color, "22", "22")
-            
-            # Use a container to show icon + text properly
-            col1, col2 = st.columns([0.15, 0.85])
-            with col1:
-                st.markdown(f"<div style='text-align: center; padding-top: 0.4rem;'>{icon_html}</div>", unsafe_allow_html=True)
-            with col2:
-                if st.button(
-                    module_info['label'],
-                    key=f"nav_{module_key}",
-                    use_container_width=True,
-                    type="primary" if is_active else "secondary",
-                ):
-                    on_module_change(module_key)
-                    st.rerun()
+            icon_color = "#64ffda" if is_active else "#8a94a6"
+            icon_html = get_icon(module_info['icon'], icon_color, "20", "20")
+            dot = "#64ffda" if is_active else "#5c6779"
+            border = "1px solid #64ffda" if is_active else "1px solid #1f2d44"
+            bg = "#0d1528" if is_active else "#111a2e"
 
-            # Show submodules if active
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:.6rem;"
+                f"padding:.55rem .7rem;margin-bottom:.4rem;border:{border};"
+                f"border-radius:8px;background:{bg};'>"
+                f"<span style='width:7px;height:7px;border-radius:50%;background:{dot};"
+                f"flex-shrink:0;'></span>"
+                f"{icon_html}"
+                f"<span style='font-weight:{700 if is_active else 600};"
+                f"color:{'#64ffda' if is_active else '#e8edf3'};font-size:.92rem;'>"
+                f"{module_info['label']}</span></div>",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                module_info['label'],
+                key=f"nav_{module_key}",
+                use_container_width=True,
+                type="primary" if is_active else "secondary",
+            ):
+                on_module_change(module_key)
+                st.rerun()
+
+            # Show submodules if active - radio keeps one widget, one rerun
             if is_active and "submodules" in module_info:
-                st.markdown("<div style='margin-left: 0.5rem; margin-bottom: 0.5rem;'>", unsafe_allow_html=True)
-                for sub_key, sub_label in module_info["submodules"].items():
-                    sub_icon = get_icon(sub_key, "#8892b0", "18", "18")
-                    
-                    scol1, scol2 = st.columns([0.15, 0.85])
-                    with scol1:
-                        st.markdown(f"<div style='text-align: center; padding-top: 0.3rem;'>{sub_icon}</div>", unsafe_allow_html=True)
-                    with scol2:
-                        if st.button(
-                            sub_label,
-                            key=f"nav_{module_key}_{sub_key}",
-                            use_container_width=True,
-                            type="secondary",
-                        ):
-                            st.session_state[f"{module_key}_submodule"] = sub_key
-                            st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                sub_keys = list(module_info["submodules"].keys())
+                current_sub = st.session_state.get(f"{module_key}_submodule", sub_keys[0])
+                try:
+                    idx = sub_keys.index(current_sub)
+                except ValueError:
+                    idx = 0
+                chosen = st.radio(
+                    f"{module_info['label']} type",
+                    options=sub_keys,
+                    format_func=lambda k: module_info["submodules"][k],
+                    index=idx,
+                    key=f"nav_radio_{module_key}",
+                    label_visibility="collapsed",
+                )
+                if chosen != current_sub:
+                    st.session_state[f"{module_key}_submodule"] = chosen
+                    st.rerun()
 
         st.markdown("---")
 

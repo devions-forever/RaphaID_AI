@@ -1,10 +1,12 @@
 """
-Footer Component — Session/Metrics/Analytics Panels
+Footer Component — Session/Metrics/Analytics Panels (flat, icon-based).
 """
 
 import streamlit as st
 from datetime import datetime
 from typing import Dict, Any
+
+from app.components.icons import get_icon
 
 
 def render_footer(
@@ -27,7 +29,11 @@ def render_footer(
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("#### 📊 Session Info")
+        st.markdown(
+            f"{get_icon('dashboard', '#64ffda', '16', '16')} "
+            "<span style='font-weight:700;color:#e8edf3;'>Session Info</span>",
+            unsafe_allow_html=True,
+        )
         st.markdown(f"""
         <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
             <div><strong>Session ID:</strong> {session_data.get('session_id', 'N/A')[:8]}</div>
@@ -38,7 +44,11 @@ def render_footer(
         """, unsafe_allow_html=True)
 
     with col2:
-        st.markdown("#### 📈 Quick Metrics")
+        st.markdown(
+            f"{get_icon('memory', '#64FFDA', '16', '16')} "
+            "<span style='font-weight:700;color:#E8EDF3;'>Quick Metrics</span>",
+            unsafe_allow_html=True,
+        )
         metrics = session_data.get("metrics", {})
         st.markdown(f"""
         <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
@@ -51,7 +61,11 @@ def render_footer(
 
     with col3:
         if show_analytics:
-            st.markdown("#### 📉 Analytics")
+            st.markdown(
+                f"{get_icon('magnifying_glass_chart', '#64FFDA', '16', '16')} "
+                "<span style='font-weight:700;color:#E8EDF3;'>Analytics</span>",
+                unsafe_allow_html=True,
+            )
             analytics = session_data.get("analytics", {})
             st.markdown(f"""
             <div style="font-size: 0.85rem; color: #8892b0; line-height: 1.8;">
@@ -59,12 +73,16 @@ def render_footer(
                 <div><strong>Sickle Cell:</strong> {analytics.get('sickle_cell', 0)} scans</div>
                 <div><strong>ALL:</strong> {analytics.get('all', 0)} scans</div>
                 <div><strong>Iron Def:</strong> {analytics.get('iron_deficiency', 0)} scans</div>
+                <div><strong>MRI:</strong> {analytics.get('mri', 0)} scans</div>
+                <div><strong>CT:</strong> {analytics.get('ct', 0)} scans</div>
+                <div><strong>X-ray:</strong> {analytics.get('xray', 0)} scans</div>
             </div>
             """, unsafe_allow_html=True)
 
     # Copyright
     st.markdown(
         "<div class='footer-credit'>"
+        "RaphaID AI v1.0 &nbsp;·&nbsp; CPU-only &nbsp;·&nbsp; Fully offline<br>"
         "Built by Team Devions &nbsp;·&nbsp; "
         "NACOS UI × DATICAN Competition 2026"
         "</div>",
@@ -91,6 +109,9 @@ def update_session_metrics(module: str, result: Dict = None) -> None:
                 "sickle_cell": 0,
                 "all": 0,
                 "iron_deficiency": 0,
+                "mri": 0,
+                "ct": 0,
+                "xray": 0,
             },
         }
 
@@ -103,15 +124,15 @@ def update_session_metrics(module: str, result: Dict = None) -> None:
         if result.get("positive", False):
             session["metrics"]["positive_cases"] += 1
 
-    # Update module-specific analytics
+    # Update module-specific analytics (radiology kept separate from detection)
     module_map = {
         "malaria": "malaria",
         "sickle_cell": "sickle_cell",
         "all": "all",
         "iron_deficiency": "iron_deficiency",
-        "mri": "malaria",  # Radiology - map to existing for now
-        "ct": "malaria",
-        "xray": "malaria",
+        "mri": "mri",
+        "ct": "ct",
+        "xray": "xray",
     }
     if module in module_map:
         session["analytics"][module_map[module]] += 1

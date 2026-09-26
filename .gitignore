@@ -64,10 +64,10 @@ Thumbs.db
 .env
 .env.local
 
-# ---------- Misc ----------
-*.bak
-*.tmp
-*.cache
+# ---------- Local working docs (not for team commits) ----------
+UI_UPGRADE_PLAN.md
+UI_UPGRADE_PROGRESS.md
+
 !models/best.pt
 !results/
 !results/*.png
