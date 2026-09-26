@@ -264,7 +264,8 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
         st.info(f"No target detections to display for {title.lower()}.")
         return
 
-    st.markdown(f"### 🔬 {title}")
+    from app.components.icons import get_icon
+    st.markdown(f"### {get_icon('magnifying_glass_chart', '#64ffda', '20', '20')} {title}", unsafe_allow_html=True)
     st.caption("Zoomed crops for visual verification")
 
     img_h, img_w = image_bgr.shape[:2]
@@ -636,29 +637,47 @@ def _render_radiology_module(submodule: str):
         report_gen = generate_xray_report
         modality_name = "Chest X-ray"
 
+    from app.components.status import (
+        check_model_status,
+        missing_model_banner,
+        quality_card,
+        workflow_stepper,
+        metric_card,
+        callout,
+    )
+
+    STEPS = ["Upload", "Quality", "Analyse", "Verify", "Report"]
+
     with st.sidebar:
         st.markdown("---")
-        st.markdown("### ⚙️ Radiology Settings")
+        st.markdown("### Radiology Settings")
         conf = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05, key=f"conf_{submodule}")
         iou = st.slider("NMS IoU", 0.1, 0.9, 0.45, 0.05, key=f"iou_{submodule}")
 
-    detector = detector_loader(model_path)
-    if detector is None:
-        st.error(f"❌ Model not found at `{model_path}`")
-        st.info(f"Expected: `models/radiology/{submodule}_yolov8n.pt`")
-        return
+    # Model status — designed pending state instead of a dead-end error wall.
+    model_ready = check_model_status().get(submodule, {}).get("ready", False)
+    detector = None
+    if model_ready:
+        detector = detector_loader(model_path)
+        model_ready = detector is not None
+
+    workflow_stepper(STEPS, active=0)
+    if not model_ready:
+        missing_model_banner(modality_name, MODEL_PATHS["radiology"][submodule])
 
     _render_patient_intake()
 
     st.markdown("---")
+    st.markdown("#### Upload study")
     uploaded = st.file_uploader(
-        f"📤 Upload {modality_name} image (PNG, JPG, DICOM)",
+        f"{modality_name} image (PNG, JPG, TIF, DICOM)",
         type=["png", "jpg", "jpeg", "tif", "tiff", "dcm"],
         key=f"uploader_{submodule}"
     )
 
     has_image = uploaded
     if has_image:
+        dicom_meta = None
         if uploaded.name.lower().endswith(".dcm"):
             import pydicom
             ds = pydicom.dcmread(uploaded)
@@ -666,6 +685,23 @@ def _render_radiology_module(submodule: str):
             if pixel_array.dtype != np.uint8:
                 pixel_array = cv2.normalize(pixel_array, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
             img = cv2.cvtColor(pixel_array, cv2.COLOR_GRAY2BGR) if len(pixel_array.shape) == 2 else pixel_array
+            # DICOM header as a themed meta card.
+            dicom_meta = {
+                "Modality": str(getattr(ds, "Modality", "N/A")),
+                "Rows x Cols": f"{getattr(ds, 'Rows', '?')} x {getattr(ds, 'Columns', '?')}",
+                "Bits stored": str(getattr(ds, "BitsStored", "?")),
+                "Patient ID": str(getattr(ds, "PatientID", "N/A"))[:24],
+            }
+            st.markdown(
+                "<div class='rh-card' style='border-left:3px solid #64ffda;'>"
+                "<div style='font-weight:700;color:#e8edf3;margin-bottom:.3rem;'>DICOM header</div>"
+                + "".join(
+                    f"<div style='font-size:.8rem;color:#8a94a6;'>{k}: <span style='color:#e8edf3;'>{v}</span></div>"
+                    for k, v in dicom_meta.items()
+                )
+                + "</div>",
+                unsafe_allow_html=True,
+            )
         else:
             file_bytes = np.frombuffer(uploaded.read(), np.uint8)
             img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -677,25 +713,27 @@ def _render_radiology_module(submodule: str):
 
         img = _downscale_if_needed(img)
 
-        # Quality check
+        # Quality check — themed card instead of raw emoji alerts.
         quality = assess_image_quality(img, submodule)
+        quality_card(quality)
         if not quality["passed"]:
-            for issue in quality["issues"]:
-                if issue["severity"] == "error":
-                    st.error(f"🚫 {issue['message']}")
             st.stop()
-        elif quality["has_warnings"]:
-            for issue in quality["issues"]:
-                st.warning(f"⚠️ {issue['message']}")
+        workflow_stepper(STEPS, active=2)
 
-        if st.button(f"🔬 Analyse {modality_name}", type="primary", key=f"analyse_{submodule}", use_container_width=True):
+        # Run inference — disabled until weights arrive.
+        analyse_kwargs = dict(
+            type="primary", key=f"analyse_{submodule}", use_container_width=True
+        )
+        if not model_ready:
+            st.button(
+                f"Analyse {modality_name} — waiting for model weights",
+                disabled=True,
+                help=f"Drop weights at {MODEL_PATHS['radiology'][submodule]} to enable this button.",
+                **analyse_kwargs,
+            )
+        elif st.button(f"Analyse {modality_name}", **analyse_kwargs):
             with st.spinner(f"Analyzing {modality_name}..."):
-                if submodule == "mri":
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
-                elif submodule == "ct":
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
-                else:
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
+                result = detector.predict(img, conf=conf, iou=iou, annotate=True)
             st.session_state[f"result_{submodule}"] = result
             st.session_state[f"img_{submodule}"] = img
             st.session_state[f"img_name_{submodule}"] = img_name
@@ -707,21 +745,33 @@ def _render_radiology_module(submodule: str):
         img = st.session_state[f"img_{submodule}"]
         img_name = st.session_state[f"img_name_{submodule}"]
 
-        # Results summary
-        st.markdown(f"### 📋 {modality_name} Analysis Results")
+        # Results — interpreted metrics, stepper at the Verify/Report stage.
+        workflow_stepper(STEPS, active=4)
+        st.markdown("### Analysis results")
         summary = result.summary()
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.metric("Total Detections", summary["total_detections"])
-        with m2:
-            if submodule == "mri":
-                st.metric("Tumor Volume", f"{summary.get('tumor_volume_mm3', 0):.1f} mm³")
-            elif submodule == "ct":
-                st.metric("Nodule Count", summary.get("nodule_count", 0))
-            else:
-                st.metric("Pneumonia Foci", summary.get("pneumonia_count", 0))
-        with m3:
-            st.metric("Inference Time", f"{summary['inference_time_sec']:.2f}s")
+
+        total = summary["total_detections"]
+        if submodule == "mri":
+            focus_label, focus_value = "Tumor volume", f"{summary.get('tumor_volume_mm3', 0):.1f} mm³"
+        elif submodule == "ct":
+            focus_label, focus_value = "Nodule count", str(summary.get("nodule_count", 0))
+        else:
+            focus_label, focus_value = "Pneumonia foci", str(summary.get("pneumonia_count", 0))
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            metric_card("Total detections", str(total), submodule)
+        with k2:
+            metric_card(focus_label, focus_value, submodule)
+        with k3:
+            metric_card("Inference time", f"{summary['inference_time_sec']:.2f}s", "bolt")
+
+        callout(
+            f"{total} finding{'s' if total != 1 else ''} annotated on this study.",
+            "Findings are decision support only — confirm against the full study and "
+            "report to a radiologist before any clinical action.",
+            kind="info" if total else "warning",
+        )
 
         # Images
         c1, c2 = st.columns(2)
@@ -732,16 +782,25 @@ def _render_radiology_module(submodule: str):
                 st.image(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB),
                         caption="Detections", use_container_width=True)
 
-        # Detection table
-        st.markdown("### 📊 Detection Summary")
+        # Detection table — themed, not stock Streamlit.
         counts = result._per_class_counts() if hasattr(result, '_per_class_counts') else {}
         if counts:
-            df = pd.DataFrame([{"Class": k.replace("_", " ").title(), "Count": v} for k, v in counts.items()])
-            st.table(df)
+            st.markdown("### Detection summary")
+            rows = "".join(
+                f"<tr><td>{k.replace('_', ' ').title()}</td><td style='text-align:right;"
+                f"color:#64ffda;font-weight:700;'>{v}</td></tr>"
+                for k, v in counts.items()
+            )
+            st.markdown(
+                "<table class='detection-table'>"
+                "<tr><th>Class</th><th style='text-align:right;'>Count</th></tr>"
+                f"{rows}</table>",
+                unsafe_allow_html=True,
+            )
 
-        # Downloads
+        # Downloads — radiology keeps real PDF/CSV/image exports.
         st.markdown("---")
-        st.markdown("### 📥 Download Reports")
+        st.markdown("### Download reports")
         d1, d2, d3 = st.columns(3)
         with d1:
             try:
@@ -750,20 +809,20 @@ def _render_radiology_module(submodule: str):
                     patient_details=st.session_state.get("patient_details"),
                     report_meta=st.session_state.get("report_meta"),
                 )
-                st.download_button("📄 PDF Report", pdf_bytes,
+                st.download_button("PDF report", pdf_bytes,
                                  f"{submodule}_report_{Path(img_name).stem}.pdf", "application/pdf")
             except Exception as e:
-                st.error(f"PDF error: {e}")
+                callout("PDF export failed", str(e), kind="error")
         with d2:
             csv_data = generate_csv_report_radiology(result, submodule)
-            st.download_button("📊 CSV", csv_data,
+            st.download_button("CSV detections", csv_data,
                              f"{submodule}_detections_{Path(img_name).stem}.csv", "text/csv")
         with d3:
             if result.annotated_image is not None:
                 pil_img = Image.fromarray(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB))
                 buf = io.BytesIO()
                 pil_img.save(buf, format="PNG")
-                st.download_button("🖼️ Image", buf.getvalue(),
+                st.download_button("Annotated image", buf.getvalue(),
                                  f"annotated_{Path(img_name).stem}.png", "image/png")
 
         update_session_metrics(submodule, {"total_detections": summary["total_detections"], "positive": summary["total_detections"] > 0})

@@ -110,6 +110,33 @@ def info_card(title: str, content: str, icon_key: str = "dashboard") -> None:
     )
 
 
+def callout(message: str, detail: str = "", kind: str = "info") -> None:
+    """Flat themed callout card.
+
+    kind: "info" (teal), "warning" (yellow), "error" (red), "success" (green).
+    """
+    palette = {
+        "info": ("#64ffda", "#8a94a6"),
+        "warning": ("#ffd700", "#8a94a6"),
+        "error": ("#F87171", "#8a94a6"),
+        "success": ("#4ade80", "#8a94a6"),
+    }
+    accent, body_color = palette.get(kind, palette["info"])
+    detail_html = (
+        f"<div style='font-size:.82rem;color:{body_color};margin-top:.25rem;'>{detail}</div>"
+        if detail
+        else ""
+    )
+    st.markdown(
+        "<div class='rh-card' style='border-left:3px solid "
+        f"{accent};margin:1rem 0;'>"
+        f"<div style='font-weight:700;color:#e8edf3;'>{message}</div>"
+        f"{detail_html}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+
 def missing_model_banner(submodule: str, expected_path: str) -> None:
     st.markdown(
         "<div style='background:#111a2e;border:1px solid #1f2d44;border-left:3px solid #64ffda;"
