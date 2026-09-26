@@ -43,6 +43,7 @@ _splash.start("Booting RaphaID AI clinical platform...")
 _splash.step(10, "Initialising neural network runtime...")
 import torch
 import torch._classes as _tc
+import io
 
 
 # Monkey patch _ClassNamespace to gracefully handle __path__/__file__ access
