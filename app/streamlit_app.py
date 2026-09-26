@@ -791,9 +791,9 @@ def main():
     # Apply theme
     apply_theme()
 
-    # Show splash screen on first load (5 seconds)
-    if "splash_shown" not in st.session_state:
-        render_splash_screen(duration=5.0)
+    # Clinical boot splash — self-guarded, renders once per browser session.
+    # Must run before the sidebar/dashboard so the overlay covers the first paint.
+    render_splash_screen(duration=4.0)
 
     # Session state initialization
     defaults = {
