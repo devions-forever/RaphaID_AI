@@ -20,9 +20,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # set_page_config() must be the very first Streamlit command in the script.
+FAVICON_FILE = PROJECT_ROOT / "app" / "assets" / "favicon.png"
 st.set_page_config(
-    page_title="RaphaID AI",
-    page_icon="🩺",
+    page_title="RaphaID AI — Clinical Diagnostic Suite",
+    page_icon=str(FAVICON_FILE) if FAVICON_FILE.exists() else None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -833,25 +834,33 @@ def _render_radiology_module(submodule: str):
 
 
 def _render_dashboard():
-    """Render the main dashboard."""
+    """Render the main clinical dashboard."""
     colors = get_theme_colors()
     from app.components.icons import get_icon
 
+    brand_emblem = get_icon("brand", "#64ffda", "36", "36")
     st.markdown(f"""
     <div class="rh-hero">
-        <h2 style="color: #FFFFFF; margin-bottom: 0.2rem; font-size: 1.8rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-           {get_icon("dashboard", "#64ffda", "28", "28")} RaphaID AI
+        <div style="display: inline-flex; align-items: center; justify-content: center;
+                    width: 54px; height: 54px; border-radius: 14px;
+                    background: rgba(100, 255, 218, 0.08); border: 1px solid rgba(100, 255, 218, 0.25);
+                    margin-bottom: 0.6rem;">
+            {brand_emblem}
+        </div>
+        <h2 style="color: #FFFFFF; margin: 0 0 0.2rem 0; font-size: 1.85rem; letter-spacing: -0.01em;">
+            RaphaID AI
         </h2>
-        <p style="color: #D8DEE9; margin: 0 0 0.3rem 0; font-size: 0.95rem;">
-            Offline Multi-Disease Diagnostic Tool
+        <p style="color: #8A94A6; margin: 0 0 0.6rem 0; font-size: 0.95rem;">
+            Offline Multi-Disease Diagnostic Decision-Support Platform
         </p>
-        <p style="margin: 0.6rem 0 0 0;">
-            <span class="rh-badge">Air-gapped</span>
-            <span class="rh-badge">CPU-only</span>
-            <span class="rh-badge">WHO Workflow</span>
+        <p style="margin: 0.4rem 0 0 0;">
+            <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">Air-Gapped Local</span>
+            <span class="rh-badge">CPU-Only Inference</span>
+            <span class="rh-badge">WHO Severity Protocol</span>
+            <span class="rh-badge">Human-in-the-Loop</span>
         </p>
-        <p style="color: #8A94A6; margin: 0.6rem 0 0 0; font-size: 0.78rem;">
-            YOLOv8n · Human Verification · PDF + CSV Reports
+        <p style="color: #5C6779; margin: 0.6rem 0 0 0; font-size: 0.76rem;">
+            YOLOv8n Neural Detection · Radiographic Analysis · Clinical PDF & CSV Telemetry
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -860,129 +869,133 @@ def _render_dashboard():
     _status = check_model_status()
     readiness_strip(_status)
 
-    # Quick actions — flat action cards with status (icons, not emoji).
-    st.markdown("### Quick Actions")
+    # Quick actions — unified action cards with integrated buttons (clean clinical alignment)
+    st.markdown("### Clinical Modules & Workflows")
     det_ready = _status.get("malaria", {}).get("ready", False)
     rad_ready = any(_status.get(k, {}).get("ready", False) for k in ("mri", "ct", "xray"))
     kb_dir = Path(__file__).resolve().parent.parent / "data" / "medical_knowledge"
-    kb_ready = kb_dir.exists() and any(kb_dir.glob("*.md")) | any(kb_dir.glob("*.txt")) if kb_dir.exists() else False
+    kb_ready = kb_dir.exists() and (any(kb_dir.glob("*.md")) | any(kb_dir.glob("*.txt"))) if kb_dir.exists() else False
+
     actions = [
-        ("detection", "Blood Microscopy", "Malaria, Sickle Cell, ALL, Iron Def.",
-         "Ready — demo weights" if det_ready else "Pending weights", det_ready),
-        ("radiology", "Radiology Imaging", "MRI Brain, CT Chest, X-ray Chest",
-         "Ready" if rad_ready else "Pending weights", rad_ready),
-        ("chatbot", "Clinical Assistant", "Guideline-grounded Q&A with citations",
-         "Ready" if kb_ready else "Needs guideline files", kb_ready),
+        ("detection", "Blood Pathology", "Microscopy detection for Malaria, Sickle Cell, ALL, and Iron Deficiency.",
+         "Ready · Demo Weights" if det_ready else "Pending Weights", det_ready,
+         "Start Pathology Scan", "detection", "malaria", True),
+        ("radiology", "Radiology Imaging", "Multi-modality analysis for MRI Brain, CT Chest, and Chest X-ray.",
+         "Ready" if rad_ready else "Pending Weights", rad_ready,
+         "Open Radiology Suite", "radiology", "mri", False),
+        ("chatbot", "Medical Assistant", "WHO/NCDC guideline-grounded decision support with cited literature.",
+         "Knowledge Base Active" if kb_ready else "Guidelines Pending", kb_ready,
+         "Consult Assistant", "chatbot", None, False),
     ]
+
     c1, c2, c3 = st.columns(3)
-    for col, (icon, title, desc, badge, _ok) in zip((c1, c2, c3), actions):
+    for col, (icon, title, desc, badge, is_ready, btn_text, target_mod, target_sub, is_pri) in zip(
+        (c1, c2, c3), actions
+    ):
         with col:
+            status_chip_style = (
+                "color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.08);"
+                if is_ready else
+                "color:#8a94a6; border-color:#1f2d44; background:rgba(255,255,255,0.02);"
+            )
             st.markdown(
-                f"<div class='rh-card' style='text-align:center;'>"
-                f"<div style='color:#64ffda;margin-bottom:.4rem;'>{get_icon(icon, '#64ffda', '28', '28')}</div>"
-                f"<div style='font-weight:700;color:#e8edf3;'>{title}</div>"
-                f"<div style='font-size:.8rem;color:#8a94a6;margin:.25rem 0 .5rem 0;'>{desc}</div>"
-                f"<span class='rh-badge'>{badge}</span>"
-                "</div>",
+                f"""<div class='rh-card' style='text-align:center; min-height: 200px; display:flex; flex-direction:column; justify-content:space-between;'>
+                    <div>
+                        <div style='color:#64ffda; margin-bottom:.5rem;'>{get_icon(icon, '#64ffda', '30', '30')}</div>
+                        <div style='font-weight:700; color:#FFFFFF; font-size:1.05rem;'>{title}</div>
+                        <div style='font-size:.82rem; color:#8a94a6; margin:.4rem 0 .7rem 0; line-height:1.5;'>{desc}</div>
+                    </div>
+                    <div>
+                        <span class='rh-badge' style='{status_chip_style}'>{badge}</span>
+                    </div>
+                </div>""",
                 unsafe_allow_html=True,
             )
-    b1, b2, b3 = st.columns(3)
-    with b1:
-        if st.button(
-            "New Detection",
-            use_container_width=True, type="primary",
-            help="Start a new blood pathology detection analysis"
-        ):
-            st.session_state["current_module"] = "detection"
-            st.session_state["detection_submodule"] = "malaria"
-            st.rerun()
-    with b2:
-        if st.button(
-            "New Radiology Scan",
-            use_container_width=True,
-            help="Start a new radiology imaging analysis"
-        ):
-            st.session_state["current_module"] = "radiology"
-            st.session_state["radiology_submodule"] = "mri"
-            st.rerun()
-    with b3:
-        if st.button(
-            "Medical Assistant",
-            use_container_width=True,
-            help="Open the AI medical assistant chatbot"
-        ):
-            st.session_state["current_module"] = "chatbot"
-            st.rerun()
+            if st.button(
+                btn_text,
+                key=f"dash_action_{target_mod}",
+                use_container_width=True,
+                type="primary" if is_pri else "secondary",
+                help=f"Open {title}",
+            ):
+                st.session_state["current_module"] = target_mod
+                if target_sub:
+                    st.session_state[f"{target_mod}_submodule"] = target_sub
+                st.rerun()
 
-    # Honest capabilities with medical icons (no fake performance claims).
-    st.markdown("### Capabilities")
+    # Honest capabilities with unique, non-duplicated medical SVGs
+    st.markdown("### Diagnostic Specifications")
     facts = [
-        ("microchip", "Model", "YOLOv8n"),
-        ("bacterium", "Detection", "4 Diseases"),
-        ("xray_icon", "Radiology", "3 Modalities"),
-        ("robot", "Assistant", "RAG + LangGraph"),
-        ("bolt", "Compute", "CPU only"),
-        ("memory", "RAM Target", "< 6 GB"),
-        ("shield", "Offline", "Fully Air-gapped"),
-        ("file_medical", "Reports", "PDF + CSV"),
+        ("microchip", "Architecture", "YOLOv8n"),
+        ("detection", "Pathology", "4 Blood Diseases"),
+        ("radiology", "Radiology", "3 Imaging Modalities"),
+        ("robot", "Clinical AI", "RAG + LangGraph"),
+        ("bolt", "Compute", "Local CPU-Only"),
+        ("ram", "RAM Footprint", "< 6 GB Active"),
+        ("offline", "Network", "100% Air-Gapped"),
+        ("file_medical", "Telemetry", "Clinical PDF & CSV"),
     ]
     for row_start in range(0, len(facts), 4):
         cols = st.columns(4)
         for col, (icon, label, value) in zip(cols, facts[row_start:row_start + 4]):
             with col:
                 st.markdown(
-                    f"<div class='rh-card' style='text-align:center;padding:.8rem;'>"
-                    f"<div style='color:#64ffda;'>{get_icon(icon, '#64ffda', '26', '26')}</div>"
-                    f"<div style='font-size:.68rem;color:#8a94a6;text-transform:uppercase;"
-                    f"letter-spacing:.08em;margin-top:.35rem;'>{label}</div>"
-                    f"<div style='font-size:1rem;font-weight:700;color:#e8edf3;margin-top:.25rem;'>{value}</div>"
-                    "</div>",
+                    f"""<div class='rh-card' style='text-align:center; padding:.85rem;'>
+                        <div style='color:#64ffda;'>{get_icon(icon, '#64ffda', '24', '24')}</div>
+                        <div style='font-size:.68rem; color:#8a94a6; text-transform:uppercase;
+                        letter-spacing:.08em; margin-top:.35rem;'>{label}</div>
+                        <div style='font-size:.95rem; font-weight:700; color:#FFFFFF; margin-top:.2rem;'>{value}</div>
+                    </div>""",
                     unsafe_allow_html=True,
                 )
 
-    # Recent activity this session (honest — reads real session state only).
+    # Recent activity this session (honest — reads real session state only)
+    st.markdown("### Session Telemetry")
     session = st.session_state.get("session_data", {})
     analyses = session.get("analysis_count", 0)
     metrics = session.get("metrics", {})
     a1, a2, a3, a4 = st.columns(4)
     with a1:
         from app.components.status import metric_card
-        metric_card("Analyses this session", str(analyses), "magnifying_glass_chart")
+        metric_card("Analyses This Session", str(analyses), "magnifying_glass_chart")
     with a2:
-        metric_card("Total detections", str(metrics.get("total_detections", 0)), "detection")
+        metric_card("Total Detections", str(metrics.get("total_detections", 0)), "detection")
     with a3:
-        metric_card("Positive cases", str(metrics.get("positive_cases", 0)), "vial")
+        metric_card("Positive Findings", str(metrics.get("positive_cases", 0)), "vial")
     with a4:
-        metric_card("Reports generated", str(metrics.get("reports_generated", 0)), "file_medical")
+        metric_card("Verified Reports", str(metrics.get("reports_generated", 0)), "file_medical")
 
-    # Clinical workflow with medical icons — themed flat stepper, no gradients.
-    st.markdown("### Clinical Workflow")
+    # Clinical workflow with accurate medical icons
+    st.markdown("### Standard Clinical Workflow")
     workflow_steps = [
-        ("vial", "Upload", "Sample/Image"),
-        ("magnifying_glass_chart", "Quality", "Auto-Check"),
-        ("brain", "Detect", "AI Inference"),
-        ("user_doctor", "Verify", "Clinician Review"),
-        ("file_medical_2", "Report", "PDF/CSV Export"),
+        ("vial", "1. Intake & Upload", "Microscopy / DICOM"),
+        ("magnifying_glass_chart", "2. Quality Check", "Automated Exposure & Blur"),
+        ("detection", "3. AI Inference", "Neural Feature Detection"),
+        ("user_doctor", "4. Clinical Verification", "Specialist Review & Annotation"),
+        ("file_medical", "5. Report Generation", "WHO Staged PDF/CSV Export"),
     ]
-    workflow_html = '<div class="rh-stepper" style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:space-between;">'
+    workflow_html = '<div class="rh-stepper" style="display:flex; flex-wrap:wrap; gap:.5rem; justify-content:space-between;">'
     for i, (icon, title, desc) in enumerate(workflow_steps):
         workflow_html += (
             f'<div class="rh-step">'
-            f'<div style="color:#64ffda;">{get_icon(icon, "#64ffda", "26", "26")}</div>'
-            f'<div style="font-weight:600;">{title}</div>'
-            f'<div style="font-size:.75rem;color:#8a94a6;">{desc}</div>'
+            f'<div style="color:#64ffda; margin-bottom:.3rem;">{get_icon(icon, "#64ffda", "24", "24")}</div>'
+            f'<div style="font-weight:700; color:#FFFFFF; font-size:.85rem;">{title}</div>'
+            f'<div style="font-size:.72rem; color:#8a94a6; margin-top:.15rem;">{desc}</div>'
             "</div>"
         )
         if i < len(workflow_steps) - 1:
-            workflow_html += '<div style="color:#64ffda;align-self:center;">&rarr;</div>'
+            workflow_html += '<div style="color:#1f2d44; align-self:center; font-weight:700;">&rarr;</div>'
     workflow_html += "</div>"
     st.markdown(workflow_html, unsafe_allow_html=True)
 
-    # Disclaimer
-    st.warning(
-        "Disclaimer: For research use and decision support only. Not intended as a "
-        "standalone diagnostic tool. All findings require confirmation "
-        "by a qualified specialist."
+    # Clinical Disclaimer
+    st.markdown(
+        """<div class='rh-card' style='border-left: 3px solid #8a94a6; padding: 0.8rem 1rem;'>
+            <div style='font-size: 0.8rem; color: #8a94a6; line-height: 1.5;'>
+                <strong style='color: #e8edf3;'>Clinical Notice:</strong> RaphaID AI is designed for medical research and decision support in resource-constrained environments. It is not intended as a replacement for clinical judgment. All automated findings require confirmation by a qualified healthcare professional.
+            </div>
+        </div>""",
+        unsafe_allow_html=True,
     )
 
     # Footer
@@ -1052,15 +1065,47 @@ def main():
     elif module == "detection":
         submodule = st.session_state.get("detection_submodule", "malaria")
         from app.components.icons import get_icon
-        icon_html = get_icon(submodule, "#64ffda", "22", "22")
-        st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
+        icon_html = get_icon(submodule, "#64ffda", "26", "26")
+        st.markdown(
+            f"""<div class="rh-hero" style="display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.4rem; margin-bottom:1.1rem; text-align:left;">
+                <div style="display:flex; align-items:center; gap:0.85rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:rgba(100,255,218,0.08); border:1px solid rgba(100,255,218,0.25);">
+                        {icon_html}
+                    </div>
+                    <div>
+                        <div style="font-size:0.75rem; color:#8a94a6; text-transform:uppercase; letter-spacing:0.08em;">RaphaID AI &nbsp;·&nbsp; Blood Pathology</div>
+                        <div style="font-size:1.35rem; font-weight:800; color:#FFFFFF;">{DETECTION_SUBMODULES[submodule]} Detection</div>
+                    </div>
+                </div>
+                <div>
+                    <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">WHO Severity Protocol</span>
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
         _render_detection_module(submodule)
 
     elif module == "radiology":
         submodule = st.session_state.get("radiology_submodule", "mri")
         from app.components.icons import get_icon
-        icon_html = get_icon(submodule, "#64ffda", "22", "22")
-        st.markdown(f'### {icon_html} {RADIOLOGY_SUBMODULES[submodule]} Analysis', unsafe_allow_html=True)
+        icon_html = get_icon(submodule, "#64ffda", "26", "26")
+        st.markdown(
+            f"""<div class="rh-hero" style="display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.4rem; margin-bottom:1.1rem; text-align:left;">
+                <div style="display:flex; align-items:center; gap:0.85rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:rgba(100,255,218,0.08); border:1px solid rgba(100,255,218,0.25);">
+                        {icon_html}
+                    </div>
+                    <div>
+                        <div style="font-size:0.75rem; color:#8a94a6; text-transform:uppercase; letter-spacing:0.08em;">RaphaID AI &nbsp;·&nbsp; Radiology Imaging</div>
+                        <div style="font-size:1.35rem; font-weight:800; color:#FFFFFF;">{RADIOLOGY_SUBMODULES[submodule]} Analysis</div>
+                    </div>
+                </div>
+                <div>
+                    <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">DICOM / Radiography</span>
+                </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
         _render_radiology_module(submodule)
 
     elif module == "chatbot":

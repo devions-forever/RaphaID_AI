@@ -142,7 +142,7 @@ def missing_model_banner(submodule: str, expected_path: str) -> None:
         "<div style='background:#111a2e;border:1px solid #1f2d44;border-left:3px solid #64ffda;"
         "border-radius:0 10px 10px 0;padding:1rem 1.2rem;margin:1rem 0;'>"
         f"<div style='font-weight:700;color:#e8edf3;margin-bottom:.3rem;'>"
-        f"{get_icon('memory', '#64ffda', '18', '18')} Model pending — {submodule}</div>"
+        f"{get_icon('models', '#64ffda', '18', '18')} Model pending — {submodule}</div>"
         "<div style='font-size:.86rem;color:#8a94a6;'>Your team has not connected weights for this "
         "module yet. The page layout below is live; inference is disabled until weights arrive.<br>"
         f"Expected file: <code style='color:#64ffda;'>{expected_path}</code></div>"
