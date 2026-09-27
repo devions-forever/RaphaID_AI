@@ -40,21 +40,35 @@ def _icon(paths: str, color: str, size: int = 18, width: float = 2) -> str:
     )
 
 
-# Heartbeat glyph paths reused in a few places
+# ---------------------------------------------------------------------------
+# Icon glyphs (24x24, stroke) — one per boot feature chip + the brand emblem.
+# ---------------------------------------------------------------------------
+# Brand emblem: RaphaID medical cross with an ECG pulse as its horizontal arm.
+_BRAND_PATHS = (
+    '<path d="M12 2.5v6"/><path d="M12 15.5v6"/>'
+    '<path d="M2.5 12h4.2l2.1-3.8 3.1 7.6 2-3.8h7.6"/>'
+)
+# Legacy ECG trace, still used for the sweeping heartbeat line.
 _ECG_PATHS = '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'
+# Blood microscopy — bench microscope with slide stage.
 _MICROSCOPE_PATHS = (
-    '<circle cx="12" cy="12" r="5"/><path d="M12 1v2"/><path d="M12 21v2"/>'
-    '<path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/>'
-    '<path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/>'
-    '<path d="M18.36 5.64l1.42-1.42"/>'
+    '<path d="M6 18h8"/><path d="M3 22h18"/>'
+    '<path d="M14 22a7 7 0 1 0 0-14h-1"/>'
+    '<path d="M9 14h2"/>'
+    '<path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/>'
+    '<path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/>'
 )
+# Radiology AI — scan frame around a CT gantry cross-section.
 _SCAN_PATHS = (
-    '<path d="M12 5a3 3 0 1 0-3 3.5"/><path d="M12 5c0 1.38-2 2.5-3 3.5"/>'
-    '<circle cx="12" cy="12" r="3"/><path d="M12 15v4"/>'
+    '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/>'
+    '<path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>'
+    '<circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1.3"/>'
 )
+# Clinical assistant — stethoscope.
 _ASSISTANT_PATHS = (
-    '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/>'
-    '<path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 10v4"/><path d="M9 10v4"/>'
+    '<path d="M11 2v2"/><path d="M5 2v2"/>'
+    '<path d="M5 3H4a2 2 0 0 0-2 2v4a6 6 0 0 0 12 0V5a2 2 0 0 0-2-2h-1"/>'
+    '<path d="M8 15a6 6 0 0 0 12 0v-3"/><circle cx="20" cy="10" r="2"/>'
 )
 
 
@@ -118,20 +132,19 @@ def _build_splash_html(progress: int = 0, status: str = "Booting clinical AI pla
         f'<div style="position:absolute;inset:-2px;border-radius:50%;'
         f'border:2px solid rgba(100,255,218,.30);border-top-color:{_CYAN};'
         'animation:rpSpinRev 6s linear infinite;"></div>'
-        # core orb
+        # core orb — carries the RaphaID medical cross + pulse emblem
         f'<div style="width:106px;height:106px;border-radius:50%;'
         f'background:#12253a;'
         f'border:2px solid {_TEAL};display:flex;align-items:center;justify-content:center;'
         'animation:rpOrb 2.6s ease-in-out infinite;">'
-        f'{_icon(_ECG_PATHS, _TEAL, 52, 2.2)}'
+        f'{_icon(_BRAND_PATHS, _TEAL, 56, 2.4)}'
         '</div>'
         '</div>'
     )
     title = (
-        f'<h1 style="margin:0 0 6px 0;font-size:2.4rem;font-weight:800;letter-spacing:-.02em;'
-        f'color:{_TEXT};text-align:center;animation:rpRise .7s ease-out .1s both;">RaphaID '
-        f'<span style="color:#64ffda;'
-        f'">AI</span></h1>'
+        '<h1 style="margin:0 0 6px 0;font-size:2.4rem;font-weight:800;letter-spacing:-.02em;'
+        f'color:{_TEXT};text-align:center;animation:rpRise .7s ease-out .1s both;">'
+        'RaphaID <span style="color:#64ffda;">AI</span></h1>'
     )
 
     subtitle = (
@@ -226,21 +239,49 @@ def _build_splash_html(progress: int = 0, status: str = "Booting clinical AI pla
         '</div>'
     )
 
+    # NOTE — never put "!important" in an inline style attribute here.
+    # Streamlit's HTML pipeline (rehype) drops the ENTIRE style attribute when
+    # it contains !important, which silently un-fixes the overlay and breaks the
+    # centring. The hard overrides live in the stylesheet instead
+    # (see .raphaid-splash-root in app/components/theme.py).
     overlay_open = (
-        '<div class="raphaid-splash-root" style="position:fixed !important;top:0 !important;'
-        'left:0 !important;right:0 !important;bottom:0 !important;width:100vw !important;'
-        'height:100vh !important;'
-        f'background:#0a0f1d '
-        '!important;display:flex !important;flex-direction:column !important;'
-        'align-items:center !important;justify-content:center !important;'
-        'z-index:2147483000 !important;margin:0 !important;padding:24px !important;'
-        'box-sizing:border-box !important;overflow:hidden !important;pointer-events:all !important;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif !important;">'
+        '<div class="raphaid-splash-root" style="position:fixed;top:0;'
+        'left:0;right:0;bottom:0;width:100vw;'
+        'height:100vh;'
+        'background:#0a0f1d;display:flex;flex-direction:column;'
+        'align-items:center;justify-content:center;'
+        'z-index:2147483000;margin:0;padding:24px;'
+        'box-sizing:border-box;overflow:hidden;pointer-events:all;'
+        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;">'
+    )
+
+    # Top-right boot telemetry — the animated "system is working" indicator that
+    # the original design carried in the header. Kept on every page via the
+    # clinical top bar (see app/components/topbar.py).
+    top_right = (
+        '<div style="position:fixed;top:22px;right:26px;display:flex;align-items:center;gap:9px;'
+        'padding:7px 14px;background:rgba(13,22,45,.85);border:1px solid rgba(100,255,218,.28);'
+        'border-radius:999px;animation:rpRise .7s ease-out .3s both;z-index:2147483001;">'
+        '<span style="width:9px;height:9px;border-radius:50%;background:#64ffda;'
+        'box-shadow:0 0 10px #64ffda;animation:rpBlink 1.3s ease-in-out infinite;"></span>'
+        '<span style="color:#e8edf3;font-size:.70rem;font-weight:700;letter-spacing:.14em;'
+        'text-transform:uppercase;">Boot Sequence</span>'
+        f'<span style="color:#64ffda;font-size:.72rem;font-family:monospace;font-weight:700;">'
+        f'{progress}%</span>'
+        '</div>'
+    )
+
+    # Bottom-left build stamp — balances the composition.
+    bottom_left = (
+        '<div style="position:fixed;bottom:20px;left:26px;font-size:.68rem;'
+        'color:#5c6779;letter-spacing:.06em;animation:rpRise .7s ease-out 1.5s both;">'
+        'RaphaID AI &middot; Clinical Decision Support'
+        '</div>'
     )
 
     html = (
-        overlay_open + css + orb + title + subtitle + ecg
-        + chips + progress_block + status_block + badge + "</div>"
+        overlay_open + css + top_right + orb + title + subtitle + ecg
+        + chips + progress_block + status_block + badge + bottom_left + "</div>"
     )
 
     # Force a single line: the Markdown parser treats 4-space-indented lines as

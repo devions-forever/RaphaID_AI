@@ -20,9 +20,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # set_page_config() must be the very first Streamlit command in the script.
+FAVICON_FILE = PROJECT_ROOT / "app" / "assets" / "favicon.png"
 st.set_page_config(
-    page_title="RaphaID AI",
-    page_icon="🩺",
+    page_title="RaphaID AI — Clinical Diagnostic Suite",
+    page_icon=str(FAVICON_FILE) if FAVICON_FILE.exists() else None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -43,6 +44,7 @@ _splash.start("Booting RaphaID AI clinical platform...")
 _splash.step(10, "Initialising neural network runtime...")
 import torch
 import torch._classes as _tc
+import io
 
 
 # Monkey patch _ClassNamespace to gracefully handle __path__/__file__ access
@@ -81,6 +83,7 @@ _splash.step(34, "Loading imaging and data libraries...")
 from app.components.theme import apply_theme, get_theme_colors
 from app.components.navigation import render_navigation
 from app.components.footer import render_footer, update_session_metrics
+from app.components.htmlkit import render_html
 
 _splash.step(46, "Applying clinical interface theme...")
 
@@ -264,7 +267,8 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
         st.info(f"No target detections to display for {title.lower()}.")
         return
 
-    st.markdown(f"### 🔬 {title}")
+    from app.components.icons import get_icon
+    render_html(f"### {get_icon('magnifying_glass_chart', '#64ffda', '20', '20')} {title}")
     st.caption("Zoomed crops for visual verification")
 
     img_h, img_w = image_bgr.shape[:2]
@@ -312,9 +316,12 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
             with cols[i % 4]:
                 st.image(item["image"], use_container_width=True)
                 name = item["class_name"].replace("_", " ").title()
-                st.markdown(f"**{name}**")
+                render_html(f"**{name}**")
                 st.caption(f"Conf: {item['confidence']:.1%}")
-                st.caption("⚠️ Needs review" if item["is_uncertain"] else "✓ High confidence")
+                if item["is_uncertain"]:
+                    st.caption(f"{get_icon('warning', '#FFD700', '14', '14')} Needs review")
+                else:
+                    st.caption(f"{get_icon('check', '#64ffda', '14', '14')} High confidence")
 
     _render_grid(initial)
 
@@ -325,11 +332,11 @@ def _render_detection_gallery(image_bgr, detections, config, title="Detection Cl
         _, c, _ = st.columns([2, 1, 2])
         with c:
             if expanded:
-                if st.button("🔼 Show less", key="gallery_collapse", use_container_width=True):
+                if st.button("Show less", key="gallery_collapse", use_container_width=True):
                     st.session_state.gallery_expanded = False
                     st.rerun()
             else:
-                if st.button(f"🔽 Show all {len(gallery_items)}", key="gallery_expand", use_container_width=True):
+                if st.button(f"Show all {len(gallery_items)}", key="gallery_expand", use_container_width=True):
                     st.session_state.gallery_expanded = True
                     st.rerun()
 
@@ -342,7 +349,7 @@ def _render_patient_intake():
             "clinician": "", "facility": "", "notes": "",
         }
 
-    with st.expander("🏥 Patient Information", expanded=True):
+    with st.expander("Patient Information", expanded=False):
         st.caption("Session-only storage. Not saved to server. All fields optional.")
 
         c1, c2, c3 = st.columns(3)
@@ -383,7 +390,7 @@ def _render_patient_intake():
             placeholder="Brief history...", max_chars=250, height=80, key="pt_notes"
         )
 
-        if st.button("🗑 Clear", key="clear_patient"):
+        if st.button("Clear form", key="clear_patient"):
             st.session_state.patient_details = {k: ("" if k != "age" else None) for k in st.session_state.patient_details}
             st.rerun()
 
@@ -658,44 +665,70 @@ def _render_detection_module(submodule: str):
         }
         metric_keys = ["total_cells", "normal_count", "abnormal_percentage"]
 
+    from app.components.status import (
+        check_model_status,
+        missing_model_banner,
+        workflow_stepper,
+    )
+
+    STEPS = ["Upload", "Quality", "Analyse", "Verify", "Report"]
+
     # Sidebar settings
     with st.sidebar:
         st.markdown("---")
-        st.markdown("### ⚙️ Detection Settings")
+        st.markdown("### Detection Settings")
         conf = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05, key=f"conf_{submodule}")
         iou = st.slider("NMS IoU", 0.1, 0.9, 0.45, 0.05, key=f"iou_{submodule}")
         st.checkbox(
             "Show all classes (incl. healthy)", value=True, key=f"show_all_{submodule}"
         )
 
-    # Load model
-    detector = detector_loader(model_path)
+    # Model status — designed pending state instead of a dead-end error wall.
+    model_ready = check_model_status().get(submodule, {}).get("ready", False)
+    if model_ready:
+        detector = detector_loader(model_path)
+        if detector is not None:
+            model_ready = True
+    else:
+        detector = None
     if detector is None:
-        st.error(f"❌ Model not found at `{model_path}`. Train or download weights first.")
-        st.info("Expected: `models/detection/{submodule}_yolov8n.pt`")
-        return
+        model_ready = False
+        detector = None
 
-    # Patient intake
+    workflow_stepper(STEPS, active=0)
+    if not model_ready:
+        missing_model_banner(
+            DETECTION_SUBMODULES.get(submodule, submodule),
+            MODEL_PATHS["detection"][submodule],
+        )
+
+    # Patient intake — collapsed so Upload/Analyse stay near the top.
     _render_patient_intake()
 
     # Image upload
     st.markdown("---")
+    st.markdown("#### Upload slide")
     uploaded = st.file_uploader(
-        "📤 Upload microscopy image",
+        "Microscopy image (PNG, JPG, TIF, BMP)",
         type=["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
         key=f"uploader_{submodule}"
     )
 
-    # Sample images
+    # Sample images — clinical thumbnails with real labels.
     st.markdown("**Or try a sample:**")
     s1, s2, s3 = st.columns(3)
-    samples = {"Sample 1": "app/samples/infected_sample.jpg",
-               "Sample 2": "app/samples/mixed_sample.jpg",
-               "Sample 3": "app/samples/healthy_sample.jpg"}
+    samples = {
+        "Infected": "app/samples/infected_sample.jpg",
+        "Mixed field": "app/samples/mixed_sample.jpg",
+        "Healthy": "app/samples/healthy_sample.jpg",
+    }
     for i, (label, path) in enumerate(samples.items()):
         with [s1, s2, s3][i]:
-            if st.button(f"🔬 {label}", key=f"sample_{submodule}_{i}"):
+            if Path(path).exists():
+                st.image(path, use_container_width=True, caption=label)
+            if st.button(label, key=f"sample_{submodule}_{i}", use_container_width=True):
                 st.session_state[f"sample_{submodule}"] = path
+                st.rerun()
 
     has_image = uploaded or f"sample_{submodule}" in st.session_state
     if has_image:
@@ -713,19 +746,26 @@ def _render_detection_module(submodule: str):
 
         img = _downscale_if_needed(img)
 
-        # Quality check
+        # Quality check — themed card instead of raw emoji alerts.
+        from app.components.status import quality_card
         quality = assess_image_quality(img, "microscopy")
+        quality_card(quality)
         if not quality["passed"]:
-            for issue in quality["issues"]:
-                if issue["severity"] == "error":
-                    st.error(f"🚫 {issue['message']} ({issue['detail']})")
             st.stop()
-        elif quality["has_warnings"]:
-            for issue in quality["issues"]:
-                st.warning(f"⚠️ {issue['message']} ({issue['detail']})")
+        workflow_stepper(STEPS, active=2)
 
         # Run inference
-        if st.button("🔬 Analyse Slide", type="primary", key=f"analyse_{submodule}", use_container_width=True):
+        analyse_kwargs = dict(
+            type="primary", key=f"analyse_{submodule}", use_container_width=True
+        )
+        if not model_ready:
+            st.button(
+                "Analyse Slide — waiting for model weights",
+                disabled=True,
+                help=f"Drop weights at {MODEL_PATHS['detection'][submodule]} to enable this button.",
+                **analyse_kwargs,
+            )
+        elif st.button("Analyse Slide", **analyse_kwargs):
             with st.spinner("Running detection..."):
                 result = detector.predict(img, conf=conf, iou=iou, annotate=True)
             st.session_state[f"result_{submodule}"] = result
@@ -740,14 +780,25 @@ def _render_detection_module(submodule: str):
         img = st.session_state[f"img_{submodule}"]
         img_name = st.session_state[f"img_name_{submodule}"]
 
-        # Metrics
+        workflow_stepper(STEPS, active=3)
+
+        # Metrics with plain-English interpretation under each value.
+        interp = {
+            "malaria": ["Cells counted in the field", "Parasite-positive cells", "Parasitaemia — WHO severity band applies"],
+            "sickle_cell": ["Normal morphology cells", "Abnormal shape variants", "Abnormal share of the field"],
+            "all": ["Lymphocytes counted", "Blast cells detected", "Blast share — escalation threshold is clinical"],
+            "iron_deficiency": ["RBCs counted", "Normal morphometry", "Microcytic/hypochromic share"],
+        }[submodule]
         m1, m2, m3 = st.columns(3)
         with m1:
-            st.metric("Total Cells", getattr(result, metric_keys[0], len(result.detections)))
+            st.metric(DETECTION_SUBMODULES and interp[0], getattr(result, metric_keys[0], len(result.detections)))
+            st.caption(interp[0])
         with m2:
-            st.metric("Abnormal/Parasites", getattr(result, metric_keys[1], 0))
+            st.metric(interp[1], getattr(result, metric_keys[1], 0))
+            st.caption("Model-detected, requires human confirmation")
         with m3:
-            st.metric("Percentage", f"{getattr(result, metric_keys[2], 0):.2f}%")
+            st.metric(interp[2], f"{getattr(result, metric_keys[2], 0):.2f}%")
+            st.caption("Estimate — not a laboratory value")
 
         # Images
         c1, c2 = st.columns(2)
@@ -757,22 +808,35 @@ def _render_detection_module(submodule: str):
             display_img = _draw_filtered(img, result.detections, config, class_colors, submodule)
             st.image(cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB), caption="Detections", use_container_width=True)
 
-        # Uncertainty check
+        # Uncertainty check — themed callout, verification lands with orchestrator.
         parasite_classes = config.get("parasite_classes") or config.get("abnormal_classes") or config.get("blast_classes", set())
         unc, conf_cnt = _count_tiers(result.detections, parasite_classes, config["uncertainty_low"], config["uncertainty_high"])
         if unc > 0:
-            st.warning(f"⚠️ {unc} detection(s) need human verification (confidence 35-45%)")
+            from app.components.status import callout
+            callout(
+                f"{unc} detection(s) in the 35–45% confidence band need human verification.",
+                "These are drawn with thick yellow boxes. Orchestrator verification activates when weights are connected.",
+                kind="warning",
+            )
 
         # Gallery
         _render_detection_gallery(img, result.detections, config)
 
         # Downloads
+        workflow_stepper(STEPS, active=4)
         st.markdown("---")
-        st.markdown("### 📥 Download Reports")
+        st.markdown("#### Download Reports")
         d1, d2, d3 = st.columns(3)
         with d1:
-            # PDF would need disease-specific generator
-            st.info("PDF report generation per-disease coming soon")
+            st.download_button(
+                "PDF Report",
+                data=b"",
+                file_name=f"{submodule}_report_{Path(img_name).stem}.pdf",
+                mime="application/pdf",
+                disabled=True,
+                help="PDF template ready — activates when the report generator is wired to results.",
+                use_container_width=True,
+            )
         with d2:
             # CSV
             import csv, io
@@ -781,15 +845,17 @@ def _render_detection_module(submodule: str):
             writer.writerow(["class", "confidence", "x1", "y1", "x2", "y2"])
             for d in result.detections:
                 writer.writerow([d.class_name, f"{d.confidence:.4f}", *[f"{v:.1f}" for v in d.bbox_xyxy]])
-            st.download_button("📊 CSV", output.getvalue(),
-                             f"detections_{Path(img_name).stem}.csv", "text/csv")
+            st.download_button("CSV detections", output.getvalue(),
+                             f"detections_{Path(img_name).stem}.csv", "text/csv",
+                             use_container_width=True)
         with d3:
             if result.annotated_image is not None:
                 pil_img = Image.fromarray(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB))
                 buf = io.BytesIO()
                 pil_img.save(buf, format="PNG")
-                st.download_button("🖼️ Image", buf.getvalue(),
-                                 f"annotated_{Path(img_name).stem}.png", "image/png")
+                st.download_button("Annotated image", buf.getvalue(),
+                                 f"annotated_{Path(img_name).stem}.png", "image/png",
+                                 use_container_width=True)
 
         # Update session metrics
         update_session_metrics(submodule, {"total_detections": len(result.detections), "positive": getattr(result, metric_keys[1], 0) > 0})
@@ -812,29 +878,47 @@ def _render_radiology_module(submodule: str):
         report_gen = generate_xray_report
         modality_name = "Chest X-ray"
 
+    from app.components.status import (
+        check_model_status,
+        missing_model_banner,
+        quality_card,
+        workflow_stepper,
+        metric_card,
+        callout,
+    )
+
+    STEPS = ["Upload", "Quality", "Analyse", "Verify", "Report"]
+
     with st.sidebar:
         st.markdown("---")
-        st.markdown("### ⚙️ Radiology Settings")
+        st.markdown("### Radiology Settings")
         conf = st.slider("Confidence Threshold", 0.05, 0.95, 0.25, 0.05, key=f"conf_{submodule}")
         iou = st.slider("NMS IoU", 0.1, 0.9, 0.45, 0.05, key=f"iou_{submodule}")
 
-    detector = detector_loader(model_path)
-    if detector is None:
-        st.error(f"❌ Model not found at `{model_path}`")
-        st.info(f"Expected: `models/radiology/{submodule}_yolov8n.pt`")
-        return
+    # Model status — designed pending state instead of a dead-end error wall.
+    model_ready = check_model_status().get(submodule, {}).get("ready", False)
+    detector = None
+    if model_ready:
+        detector = detector_loader(model_path)
+        model_ready = detector is not None
+
+    workflow_stepper(STEPS, active=0)
+    if not model_ready:
+        missing_model_banner(modality_name, MODEL_PATHS["radiology"][submodule])
 
     _render_patient_intake()
 
     st.markdown("---")
+    st.markdown("#### Upload study")
     uploaded = st.file_uploader(
-        f"📤 Upload {modality_name} image (PNG, JPG, DICOM)",
+        f"{modality_name} image (PNG, JPG, TIF, DICOM)",
         type=["png", "jpg", "jpeg", "tif", "tiff", "dcm"],
         key=f"uploader_{submodule}"
     )
 
     has_image = uploaded
     if has_image:
+        dicom_meta = None
         if uploaded.name.lower().endswith(".dcm"):
             import pydicom
             ds = pydicom.dcmread(uploaded)
@@ -842,6 +926,22 @@ def _render_radiology_module(submodule: str):
             if pixel_array.dtype != np.uint8:
                 pixel_array = cv2.normalize(pixel_array, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
             img = cv2.cvtColor(pixel_array, cv2.COLOR_GRAY2BGR) if len(pixel_array.shape) == 2 else pixel_array
+            # DICOM header as a themed meta card.
+            dicom_meta = {
+                "Modality": str(getattr(ds, "Modality", "N/A")),
+                "Rows x Cols": f"{getattr(ds, 'Rows', '?')} x {getattr(ds, 'Columns', '?')}",
+                "Bits stored": str(getattr(ds, "BitsStored", "?")),
+                "Patient ID": str(getattr(ds, "PatientID", "N/A"))[:24],
+            }
+            render_html(
+                "<div class='rh-card' style='border-left:3px solid #64ffda;'>"
+                "<div style='font-weight:700;color:#e8edf3;margin-bottom:.3rem;'>DICOM header</div>"
+                + "".join(
+                    f"<div style='font-size:.8rem;color:#8a94a6;'>{k}: <span style='color:#e8edf3;'>{v}</span></div>"
+                    for k, v in dicom_meta.items()
+                )
+                + "</div>",
+            )
         else:
             file_bytes = np.frombuffer(uploaded.read(), np.uint8)
             img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
@@ -853,25 +953,27 @@ def _render_radiology_module(submodule: str):
 
         img = _downscale_if_needed(img)
 
-        # Quality check
+        # Quality check — themed card instead of raw emoji alerts.
         quality = assess_image_quality(img, submodule)
+        quality_card(quality)
         if not quality["passed"]:
-            for issue in quality["issues"]:
-                if issue["severity"] == "error":
-                    st.error(f"🚫 {issue['message']}")
             st.stop()
-        elif quality["has_warnings"]:
-            for issue in quality["issues"]:
-                st.warning(f"⚠️ {issue['message']}")
+        workflow_stepper(STEPS, active=2)
 
-        if st.button(f"🔬 Analyse {modality_name}", type="primary", key=f"analyse_{submodule}", use_container_width=True):
+        # Run inference — disabled until weights arrive.
+        analyse_kwargs = dict(
+            type="primary", key=f"analyse_{submodule}", use_container_width=True
+        )
+        if not model_ready:
+            st.button(
+                f"Analyse {modality_name} — waiting for model weights",
+                disabled=True,
+                help=f"Drop weights at {MODEL_PATHS['radiology'][submodule]} to enable this button.",
+                **analyse_kwargs,
+            )
+        elif st.button(f"Analyse {modality_name}", **analyse_kwargs):
             with st.spinner(f"Analyzing {modality_name}..."):
-                if submodule == "mri":
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
-                elif submodule == "ct":
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
-                else:
-                    result = detector.predict(img, conf=conf, iou=iou, annotate=True)
+                result = detector.predict(img, conf=conf, iou=iou, annotate=True)
             st.session_state[f"result_{submodule}"] = result
             st.session_state[f"img_{submodule}"] = img
             st.session_state[f"img_name_{submodule}"] = img_name
@@ -883,21 +985,33 @@ def _render_radiology_module(submodule: str):
         img = st.session_state[f"img_{submodule}"]
         img_name = st.session_state[f"img_name_{submodule}"]
 
-        # Results summary
-        st.markdown(f"### 📋 {modality_name} Analysis Results")
+        # Results — interpreted metrics, stepper at the Verify/Report stage.
+        workflow_stepper(STEPS, active=4)
+        st.markdown("### Analysis results")
         summary = result.summary()
-        m1, m2, m3 = st.columns(3)
-        with m1:
-            st.metric("Total Detections", summary["total_detections"])
-        with m2:
-            if submodule == "mri":
-                st.metric("Tumor Volume", f"{summary.get('tumor_volume_mm3', 0):.1f} mm³")
-            elif submodule == "ct":
-                st.metric("Nodule Count", summary.get("nodule_count", 0))
-            else:
-                st.metric("Pneumonia Foci", summary.get("pneumonia_count", 0))
-        with m3:
-            st.metric("Inference Time", f"{summary['inference_time_sec']:.2f}s")
+
+        total = summary["total_detections"]
+        if submodule == "mri":
+            focus_label, focus_value = "Tumor volume", f"{summary.get('tumor_volume_mm3', 0):.1f} mm³"
+        elif submodule == "ct":
+            focus_label, focus_value = "Nodule count", str(summary.get("nodule_count", 0))
+        else:
+            focus_label, focus_value = "Pneumonia foci", str(summary.get("pneumonia_count", 0))
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            metric_card("Total detections", str(total), submodule)
+        with k2:
+            metric_card(focus_label, focus_value, submodule)
+        with k3:
+            metric_card("Inference time", f"{summary['inference_time_sec']:.2f}s", "bolt")
+
+        callout(
+            f"{total} finding{'s' if total != 1 else ''} annotated on this study.",
+            "Findings are decision support only — confirm against the full study and "
+            "report to a radiologist before any clinical action.",
+            kind="info" if total else "warning",
+        )
 
         # Images
         c1, c2 = st.columns(2)
@@ -908,16 +1022,24 @@ def _render_radiology_module(submodule: str):
                 st.image(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB),
                         caption="Detections", use_container_width=True)
 
-        # Detection table
-        st.markdown("### 📊 Detection Summary")
+        # Detection table — themed, not stock Streamlit.
         counts = result._per_class_counts() if hasattr(result, '_per_class_counts') else {}
         if counts:
-            df = pd.DataFrame([{"Class": k.replace("_", " ").title(), "Count": v} for k, v in counts.items()])
-            st.table(df)
+            st.markdown("### Detection summary")
+            rows = "".join(
+                f"<tr><td>{k.replace('_', ' ').title()}</td><td style='text-align:right;"
+                f"color:#64ffda;font-weight:700;'>{v}</td></tr>"
+                for k, v in counts.items()
+            )
+            render_html(
+                "<table class='detection-table'>"
+                "<tr><th>Class</th><th style='text-align:right;'>Count</th></tr>"
+                f"{rows}</table>",
+            )
 
-        # Downloads
+        # Downloads — radiology keeps real PDF/CSV/image exports.
         st.markdown("---")
-        st.markdown("### 📥 Download Reports")
+        st.markdown("### Download reports")
         d1, d2, d3 = st.columns(3)
         with d1:
             try:
@@ -926,131 +1048,209 @@ def _render_radiology_module(submodule: str):
                     patient_details=st.session_state.get("patient_details"),
                     report_meta=st.session_state.get("report_meta"),
                 )
-                st.download_button("📄 PDF Report", pdf_bytes,
+                st.download_button("PDF report", pdf_bytes,
                                  f"{submodule}_report_{Path(img_name).stem}.pdf", "application/pdf")
             except Exception as e:
-                st.error(f"PDF error: {e}")
+                callout("PDF export failed", str(e), kind="error")
         with d2:
             csv_data = generate_csv_report_radiology(result, submodule)
-            st.download_button("📊 CSV", csv_data,
+            st.download_button("CSV detections", csv_data,
                              f"{submodule}_detections_{Path(img_name).stem}.csv", "text/csv")
         with d3:
             if result.annotated_image is not None:
                 pil_img = Image.fromarray(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB))
                 buf = io.BytesIO()
                 pil_img.save(buf, format="PNG")
-                st.download_button("🖼️ Image", buf.getvalue(),
+                st.download_button("Annotated image", buf.getvalue(),
                                  f"annotated_{Path(img_name).stem}.png", "image/png")
 
         update_session_metrics(submodule, {"total_detections": summary["total_detections"], "positive": summary["total_detections"] > 0})
 
 
 def _render_dashboard():
-    """Render the main dashboard."""
+    """Render the main clinical dashboard."""
     colors = get_theme_colors()
     from app.components.icons import get_icon
 
-    st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #0d0d1a, #1a1a2e, #0f3460);
-                border-radius: 14px; padding: 1.2rem 1.8rem; margin-bottom: 1rem;
-                border: 1px solid rgba(255,255,255,0.12); text-align: center;">
-        <h2 style="color: #FFFFFF; margin-bottom: 0.2rem; font-size: 1.8rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-           {get_icon("dashboard", "#64ffda", "28", "28")} RaphaID AI
+    brand_emblem = get_icon("brand", "#64ffda", "36", "36")
+
+    from app.components.status import readiness_strip, check_model_status
+    _status = check_model_status()
+    _ready = sum(1 for v in _status.values() if v.get("ready"))
+    _total = len(_status) or 1
+    _kb_dir = Path(__file__).resolve().parent.parent / "data" / "medical_knowledge"
+    _kb_files = (
+        len(list(_kb_dir.glob("*.md"))) + len(list(_kb_dir.glob("*.txt")))
+        if _kb_dir.exists()
+        else 0
+    )
+
+    def _health_pill(label: str, ok: bool, detail: str) -> str:
+        color = "#64ffda" if ok else "#8a94a6"
+        return (
+            f'<span style="display:inline-flex; align-items:center; gap:6px; font-size:0.72rem; '
+            f'color:{color}; border:1px solid {color}55; background:{color}12; border-radius:999px; '
+            f'padding:3px 10px; margin:0 4px 4px 0; white-space:nowrap;">'
+            f'<span style="width:6px; height:6px; border-radius:50%; background:{color};"></span>'
+            f'{label} <span style="color:#8a94a6;">· {detail}</span></span>'
+        )
+
+    render_html(f"""
+    <div class="rh-hero">
+        <div style="display: inline-flex; align-items: center; justify-content: center;
+                    width: 54px; height: 54px; border-radius: 14px;
+                    background: rgba(100, 255, 218, 0.08); border: 1px solid rgba(100, 255, 218, 0.25);
+                    margin-bottom: 0.6rem;">
+            {brand_emblem}
+        </div>
+        <h2 style="color: #FFFFFF; margin: 0 0 0.2rem 0; font-size: 1.85rem; letter-spacing: -0.01em;">
+            RaphaID AI
         </h2>
-        <p style="color: #D8DEE9; margin: 0 0 0.3rem 0; font-size: 0.95rem;">
-            Offline Multi-Disease Diagnostic Tool
+        <p style="color: #8A94A6; margin: 0 0 0.6rem 0; font-size: 0.95rem;">
+            Offline Multi-Disease Diagnostic Decision-Support Platform
         </p>
-        <p style="color: #9AA4B2; margin: 0 0 1rem 0; font-size: 0.78rem;">
-            YOLOv8n · WHO Workflow · Human Verification
+        <p style="margin: 0.4rem 0 0.75rem 0;">
+            <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">Air-Gapped Local</span>
+            <span class="rh-badge">CPU-Only Inference</span>
+            <span class="rh-badge">WHO Severity Protocol</span>
+            <span class="rh-badge">Human-in-the-Loop</span>
+        </p>
+        <div style="border-top:1px solid #1f2d44; padding-top:0.7rem; margin-top:0.2rem;">
+            {_health_pill("Platform", True, "Operational")}
+            {_health_pill("Inference weights", _ready == _total, f"{_ready}/{_total} ready")}
+            {_health_pill("Knowledge base", _kb_files > 0, f"{_kb_files} documents")}
+            {_health_pill("Network", True, "Air-gapped")}
+        </div>
+        <p style="color: #5C6779; margin: 0.6rem 0 0 0; font-size: 0.76rem;">
+            YOLOv8n Neural Detection · Radiographic Analysis · Clinical PDF &amp; CSV Telemetry
         </p>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-    # Quick actions - use columns with icon + button
-    st.markdown("### Quick Actions")
+    readiness_strip(_status)
+
+    # Quick actions — unified action cards with integrated buttons (clean clinical alignment)
+    render_html("### Clinical Modules & Workflows")
+    det_ready = _status.get("malaria", {}).get("ready", False)
+    rad_ready = any(_status.get(k, {}).get("ready", False) for k in ("mri", "ct", "xray"))
+    kb_ready = _kb_files > 0
+
+    actions = [
+        ("detection", "Blood Pathology", "Microscopy detection for Malaria, Sickle Cell, ALL, and Iron Deficiency.",
+         "Ready · Demo Weights" if det_ready else "Pending Weights", det_ready,
+         "Start Pathology Scan", "detection", "malaria", True),
+        ("radiology", "Radiology Imaging", "Multi-modality analysis for MRI Brain, CT Chest, and Chest X-ray.",
+         "Ready" if rad_ready else "Pending Weights", rad_ready,
+         "Open Radiology Suite", "radiology", "mri", False),
+        ("chatbot", "Medical Assistant", "WHO/NCDC guideline-grounded decision support with cited literature.",
+         "Knowledge Base Active" if kb_ready else "Guidelines Pending", kb_ready,
+         "Consult Assistant", "chatbot", None, False),
+    ]
+
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('detection', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
-        if st.button(
-            "New Detection",
-            use_container_width=True, type="primary",
-            help="Start a new blood pathology detection analysis"
-        ):
-            st.session_state["current_module"] = "detection"
-            st.session_state["detection_submodule"] = "malaria"
-            st.rerun()
-    with c2:
-        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('radiology', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
-        if st.button(
-            "New Radiology Scan",
-            use_container_width=True,
-            help="Start a new radiology imaging analysis"
-        ):
-            st.session_state["current_module"] = "radiology"
-            st.session_state["radiology_submodule"] = "mri"
-            st.rerun()
-    with c3:
-        st.markdown(f"<div style='text-align: center; margin-bottom: 0.5rem;'>{get_icon('chatbot', '#64ffda', '28', '28')}</div>", unsafe_allow_html=True)
-        if st.button(
-            "Medical Assistant",
-            use_container_width=True,
-            help="Open the AI medical assistant chatbot"
-        ):
-            st.session_state["current_module"] = "chatbot"
-            st.rerun()
+    for col, (icon, title, desc, badge, is_ready, btn_text, target_mod, target_sub, is_pri) in zip(
+        (c1, c2, c3), actions
+    ):
+        with col:
+            status_chip_style = (
+                "color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.08);"
+                if is_ready else
+                "color:#8a94a6; border-color:#1f2d44; background:rgba(255,255,255,0.02);"
+            )
+            render_html(
+                f"""<div class='rh-card' style='text-align:center; min-height: 200px; display:flex; flex-direction:column; justify-content:space-between;'>
+                    <div>
+                        <div style='color:#64ffda; margin-bottom:.5rem;'>{get_icon(icon, '#64ffda', '30', '30')}</div>
+                        <div style='font-weight:700; color:#FFFFFF; font-size:1.05rem;'>{title}</div>
+                        <div style='font-size:.82rem; color:#8a94a6; margin:.4rem 0 .7rem 0; line-height:1.5;'>{desc}</div>
+                    </div>
+                    <div>
+                        <span class='rh-badge' style='{status_chip_style}'>{badge}</span>
+                    </div>
+                </div>""",
+            )
+            if st.button(
+                btn_text,
+                key=f"dash_action_{target_mod}",
+                use_container_width=True,
+                type="primary" if is_pri else "secondary",
+                help=f"Open {title}",
+            ):
+                st.session_state["current_module"] = target_mod
+                if target_sub:
+                    st.session_state[f"{target_mod}_submodule"] = target_sub
+                st.rerun()
 
-    # Quick facts with medical icons
-    st.markdown("### Quick Facts")
+    # Honest capabilities with unique, non-duplicated medical SVGs
+    st.markdown("### Diagnostic Specifications")
     facts = [
-        ("microchip", "Models", "YOLOv8n (quantized)"),
-        ("bacterium", "Detection", "4 Diseases"),
-        ("xray_icon", "Radiology", "3 Modalities"),
-        ("robot", "Chatbot", "RAG + LangGraph"),
-        ("bolt", "Inference", "< 500ms CPU"),
-        ("memory", "RAM Target", "< 6GB"),
-        ("shield", "Offline", "Fully Air-gapped"),
-        ("file_medical", "Reports", "PDF + CSV"),
+        ("microchip", "Architecture", "YOLOv8n"),
+        ("detection", "Pathology", "4 Blood Diseases"),
+        ("radiology", "Radiology", "3 Imaging Modalities"),
+        ("robot", "Clinical AI", "RAG + LangGraph"),
+        ("bolt", "Compute", "Local CPU-Only"),
+        ("ram", "RAM Footprint", "< 6 GB Active"),
+        ("offline", "Network", "100% Air-Gapped"),
+        ("file_medical", "Telemetry", "Clinical PDF & CSV"),
     ]
     for row_start in range(0, len(facts), 4):
         cols = st.columns(4)
-        for col, (icon, label, value) in zip(cols, facts[row_start:row_start+4]):
+        for col, (icon, label, value) in zip(cols, facts[row_start:row_start + 4]):
             with col:
-                st.markdown(f"""
-                <div style="background: #16213e; border: 1px solid rgba(255,255,255,0.12);
-                            border-radius: 10px; padding: 0.8rem; text-align: center;">
-                    <div style="font-size: 1.5rem; color: #64ffda;">{get_icon(icon, "#64ffda", "28", "28")}</div>
-                    <div style="font-size: 0.68rem; color: #9AA4B2; text-transform: uppercase; margin-top: 0.35rem;">{label}</div>
-                    <div style="font-size: 1rem; font-weight: 700; color: #FFFFFF; margin-top: 0.25rem;">{value}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                render_html(
+                    f"""<div class='rh-kpi'>
+                        <div style='color:#64ffda;'>{get_icon(icon, '#64ffda', '22', '22')}</div>
+                        <div class='rh-kpi-label' style='margin-top:.45rem;'>{label}</div>
+                        <div style='font-size:.95rem; font-weight:700; color:#FFFFFF; margin-top:.15rem;'>{value}</div>
+                    </div>""",
+                )
 
-    # Clinical workflow with medical icons
-    st.markdown("### Clinical Workflow")
+    # Recent activity this session (honest — reads real session state only)
+    st.markdown("### Session Telemetry")
+    session = st.session_state.get("session_data", {})
+    analyses = session.get("analysis_count", 0)
+    metrics = session.get("metrics", {})
+    from app.components.status import kpi_card
+    a1, a2, a3, a4 = st.columns(4)
+    with a1:
+        kpi_card("Analyses This Session", str(analyses), "magnifying_glass_chart")
+    with a2:
+        kpi_card("Total Detections", str(metrics.get("total_detections", 0)), "detection")
+    with a3:
+        kpi_card("Positive Findings", str(metrics.get("positive_cases", 0)), "vial")
+    with a4:
+        kpi_card("Verified Reports", str(metrics.get("reports_generated", 0)), "file_medical")
+
+    # Clinical workflow with accurate medical icons
+    st.markdown("### Standard Clinical Workflow")
     workflow_steps = [
-        ("vial", "Upload", "Sample/Image"),
-        ("magnifying_glass_chart", "Quality", "Auto-Check"),
-        ("brain", "Detect", "AI Inference"),
-        ("user_doctor", "Verify", "Clinician Review"),
-        ("file_medical_2", "Report", "PDF/CSV Export"),
+        ("vial", "1. Intake & Upload", "Microscopy / DICOM"),
+        ("magnifying_glass_chart", "2. Quality Check", "Automated Exposure & Blur"),
+        ("detection", "3. AI Inference", "Neural Feature Detection"),
+        ("user_doctor", "4. Clinical Verification", "Specialist Review & Annotation"),
+        ("file_medical", "5. Report Generation", "WHO Staged PDF/CSV Export"),
     ]
-    workflow_html = '<div style="background: #16213e; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between;">'
+    workflow_html = '<div class="rh-stepper" style="display:flex; flex-wrap:wrap; gap:.5rem; justify-content:space-between;">'
     for i, (icon, title, desc) in enumerate(workflow_steps):
-        workflow_html += f'''
-        <div style="flex: 1; min-width: 120px; text-align: center;">
-            <div style="font-size: 1.5rem; color: #64ffda;">{get_icon(icon, "#64ffda", "28", "28")}</div>
-            <div style="font-weight: 600;">{title}</div>
-            <div style="font-size: 0.75rem; color: #9AA4B2;">{desc}</div>
-        </div>'''
+        workflow_html += (
+            f'<div class="rh-step">'
+            f'<div style="color:#64ffda; margin-bottom:.3rem;">{get_icon(icon, "#64ffda", "24", "24")}</div>'
+            f'<div style="font-weight:700; color:#FFFFFF; font-size:.85rem;">{title}</div>'
+            f'<div style="font-size:.72rem; color:#8a94a6; margin-top:.15rem;">{desc}</div>'
+            "</div>"
+        )
         if i < len(workflow_steps) - 1:
-            workflow_html += '<div style="font-size: 1.2rem; color: #64ffda; align-self: center;">→</div>'
-    workflow_html += '</div>'
-    st.markdown(workflow_html, unsafe_allow_html=True)
+            workflow_html += '<div style="color:#1f2d44; align-self:center; font-weight:700;">&rarr;</div>'
+    workflow_html += "</div>"
+    render_html(workflow_html)
 
-    # Disclaimer
-    st.warning(
-        "Disclaimer: For research use and decision support only. Not intended as a "
-        "standalone diagnostic tool. All findings require confirmation "
-        "by a qualified specialist."
+    # Clinical Disclaimer
+    render_html(
+        """<div class='rh-card' style='border-left: 3px solid #8a94a6; padding: 0.8rem 1rem;'>
+            <div style='font-size: 0.8rem; color: #8a94a6; line-height: 1.5;'>
+                <strong style='color: #e8edf3;'>Clinical Notice:</strong> RaphaID AI is designed for medical research and decision support in resource-constrained environments. It is not intended as a replacement for clinical judgment. All automated findings require confirmation by a qualified healthcare professional.
+            </div>
+        </div>""",
     )
 
     # Footer
@@ -1079,6 +1279,24 @@ def main():
             "time": datetime.now().strftime("%H:%M"),
         },
     }
+
+    # --- Restore the workspace from the URL -------------------------------
+    # A browser refresh starts a brand-new Streamlit session, which would
+    # otherwise drop the clinician back on the dashboard. The active module and
+    # submodule are mirrored into the query string, so the URL alone is enough
+    # to land back on the same page (and makes every page linkable).
+    _VALID_MODULES = ("dashboard", "detection", "radiology", "chatbot")
+    _qp = st.query_params
+    _qp_module = _qp.get("module")
+    if _qp_module in _VALID_MODULES:
+        defaults["current_module"] = _qp_module
+    _qp_sub = _qp.get("sub")
+    if _qp_sub:
+        if _qp_module == "detection" and _qp_sub in DETECTION_SUBMODULES:
+            defaults["detection_submodule"] = _qp_sub
+        elif _qp_module == "radiology" and _qp_sub in RADIOLOGY_SUBMODULES:
+            defaults["radiology_submodule"] = _qp_sub
+
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
@@ -1114,22 +1332,67 @@ def main():
     # Route to module
     module = st.session_state["current_module"]
 
+    # Keep the URL in sync with the active workspace so a refresh restores it.
+    try:
+        if st.query_params.get("module") != module:
+            st.query_params["module"] = module
+        _sub_for_url = (
+            st.session_state.get("detection_submodule")
+            if module == "detection"
+            else st.session_state.get("radiology_submodule")
+            if module == "radiology"
+            else None
+        )
+        if _sub_for_url:
+            if st.query_params.get("sub") != _sub_for_url:
+                st.query_params["sub"] = _sub_for_url
+        elif "sub" in st.query_params:
+            del st.query_params["sub"]
+    except Exception:
+        # Query-param syncing is a convenience; never let it break the app.
+        pass
+
+    # Persistent clinical status bar (facility · clinician · patient · readiness)
+    from app.components.topbar import render_topbar
+    _active_sub = (
+        st.session_state.get("detection_submodule")
+        if module == "detection"
+        else st.session_state.get("radiology_submodule")
+        if module == "radiology"
+        else None
+    )
+    render_topbar(module, _active_sub)
+
     if module == "dashboard":
         _render_dashboard()
 
     elif module == "detection":
         submodule = st.session_state.get("detection_submodule", "malaria")
-        if submodule != "sickle_cell":
-            from app.components.icons import get_icon
-            icon_html = get_icon(submodule, "#64ffda", "22", "22")
-            st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
+        from app.components.icons import get_icon
+        icon_html = get_icon(submodule, "#64ffda", "22", "22")
+        st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
         _render_detection_module(submodule)
 
     elif module == "radiology":
         submodule = st.session_state.get("radiology_submodule", "mri")
         from app.components.icons import get_icon
-        icon_html = get_icon(submodule, "#64ffda", "22", "22")
-        st.markdown(f'### {icon_html} {RADIOLOGY_SUBMODULES[submodule]} Analysis', unsafe_allow_html=True)
+        icon_html = get_icon(submodule, "#64ffda", "26", "26")
+        render_html(
+            f"""<div class="rh-hero" style="display:flex; align-items:center; justify-content:space-between; padding:0.9rem 1.4rem; margin-bottom:1.1rem; text-align:left;">
+                <div style="display:flex; align-items:center; gap:0.85rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:10px; background:rgba(100,255,218,0.08); border:1px solid rgba(100,255,218,0.25);">
+                        {icon_html}
+                    </div>
+                    <div>
+                        <div style="font-size:0.75rem; color:#8a94a6; text-transform:uppercase; letter-spacing:0.08em;">RaphaID AI &nbsp;·&nbsp; Radiology Imaging</div>
+                        <div style="font-size:1.35rem; font-weight:800; color:#FFFFFF;">{RADIOLOGY_SUBMODULES[submodule]} Analysis</div>
+                    </div>
+                </div>
+                <div>
+                    <span class="rh-badge" style="color:#64ffda; border-color:rgba(100,255,218,0.3); background:rgba(100,255,218,0.06);">DICOM / Radiography</span>
+                </div>
+            </div>""",
+        )
         _render_radiology_module(submodule)
 
     elif module == "chatbot":

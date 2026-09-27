@@ -64,10 +64,32 @@ Thumbs.db
 .env
 .env.local
 
-# ---------- Misc ----------
-*.bak
-*.tmp
-*.cache
+# ---------- Local working docs (not for team commits) ----------
+UI_UPGRADE_PLAN.md
+UI_UPGRADE_PROGRESS.md
+
+# ---------- Streamlit / RaphaID runtime artefacts (regenerated on run) ----------
+data/vector_index/
+test_sessions/
+streamlit_err.txt
+streamlit_out.txt
+
+# ---------- Streamlit secrets — never commit ----------
+.streamlit/secrets.toml
+
+# ---------- Local UI verification output (screenshots, smoke logs) ----------
+ui_shots/
+.playwright-cli/
+
+# ---------- Tool caches ----------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------- Merge / patch leftovers ----------
+*.orig
+*.rej
+
 !models/best.pt
 !results/
 !results/*.png

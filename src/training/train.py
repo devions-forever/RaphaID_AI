@@ -145,10 +145,10 @@ def train(
         import shutil
         dest = models_dir / "best.pt"
         shutil.copy2(best_weights, dest)
-        print(f"\n✅ Best weights saved to {dest}")
+        print(f"\n[OK] Best weights saved to {dest}")
         return str(dest)
     else:
-        print("\n⚠️ best.pt not found; training may not have completed.")
+        print("\n[WARNING] best.pt not found; training may not have completed.")
         return ""
 
 

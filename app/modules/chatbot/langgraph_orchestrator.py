@@ -164,7 +164,7 @@ Intent: {intent}"""
         if ungrounded_terms:
             state["confidence"] = 0.5
             state["needs_escalation"] = True
-            state["response"] += f"\n\n⚠️ **Uncertainty Note**: Some terms in this response ({', '.join(ungrounded_terms)}) were not found in the retrieved guidelines. Please verify with official sources."
+            state["response"] += f"\n\n**[CLINICAL UNCERTAINTY NOTE]**: Some terms in this response ({', '.join(ungrounded_terms)}) were not found in the retrieved guidelines. Please verify with official sources."
         else:
             state["confidence"] = 0.9
             state["needs_escalation"] = False
@@ -180,7 +180,7 @@ Intent: {intent}"""
     def _escalate(self, state: MedicalState) -> MedicalState:
         """Add escalation notice to response."""
         state["response"] += (
-            "\n\n🔴 **ESCALATION RECOMMENDED**: This query requires specialist review. "
+            "\n\n**[CRITICAL ESCALATION RECOMMENDED]**: This query requires specialist review. "
             "The AI response has low confidence or contains ungrounded information. "
             "Please consult a qualified specialist or refer to official clinical guidelines."
         )
