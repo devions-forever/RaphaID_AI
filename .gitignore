@@ -72,3 +72,12 @@ Thumbs.db
 !results/
 !results/*.png
 !results/*.json
+
+
+# Medical datasets
+data/sickle/classification/
+data/sickle/raw/
+data/sickle/processed/
+
+# Training artifacts
+runs/

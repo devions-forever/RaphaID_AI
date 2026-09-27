@@ -10,7 +10,7 @@ loading skeleton for the entire cold start.
 
 import sys
 from pathlib import Path
-
+import io
 import streamlit as st
 
 # ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ RADIOLOGY_SUBMODULES = {
 MODEL_PATHS = {
     "detection": {
         "malaria": "models/detection/malaria_yolov8n.pt",
-        "sickle_cell": "models/detection/sickle_cell_yolov8n.pt",
+        "sickle_cell": "models/detection/sickle_cell_yolov8n_cls.pt",
         "all": "models/detection/all_yolov8n.pt",
         "iron_deficiency": "models/detection/iron_deficiency_yolov8n.pt",
     },
@@ -166,8 +166,8 @@ DETECTION_CONFIGS = {
         "uncertainty_high": 0.45,
     },
     "sickle_cell": {
-        "classes": ["normal_rbc", "sickle_cell", "target_cell", "spherocyte"],
-        "abnormal_classes": {"sickle_cell", "target_cell", "spherocyte"},
+        "classes": ["circular", "elongated", "other"],
+        "abnormal_classes": {"elongated", "other"},
         "uncertainty_low": 0.35,
         "uncertainty_high": 0.45,
     },
@@ -388,8 +388,250 @@ def _render_patient_intake():
             st.rerun()
 
 
+def _render_sickle_cell_module():
+    """Render the RBC Morphology Classification module UI (erythrocyte morphology)."""
+    from app.components.icons import get_icon
+    icon_html = get_icon("sickle_cell", "#64ffda", "22", "22")
+    st.markdown(f'### {icon_html} RBC Morphology Analysis', unsafe_allow_html=True)
+    st.caption("Individual erythrocyte morphology classification (erythrocytesIDB 2017)")
+
+    model_path = MODEL_PATHS["detection"]["sickle_cell"]
+
+    # Sidebar settings - classification has no NMS IoU
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("### ⚙️ Morphology Settings")
+        min_conf = st.slider(
+            "Minimum reporting confidence",
+            0.10, 0.95, 0.45, 0.05,
+            key="conf_sickle_cell",
+            help="Confidence threshold for classifying with high confidence. Predictions below this trigger an inconclusive / review recommendation.",
+        )
+
+    # Load model
+    detector = load_sickle_cell_model(model_path)
+    if detector is None:
+        st.error(f"❌ RBC morphology model not found at `{model_path}`.")
+        st.info("Expected: `models/detection/sickle_cell_yolov8n_cls.pt`")
+        return
+
+    # Patient intake form
+    _render_patient_intake()
+
+    # Image upload section
+    st.markdown("---")
+    st.info(
+        "🔬 **Input Requirement:** This classifier is trained on **individual RBC crops** "
+        "(erythrocytesIDB 2017), not full-field blood smears. Please upload a single erythrocyte image/crop."
+    )
+
+    uploaded = st.file_uploader(
+        "📤 Upload a single RBC image/crop for morphology classification",
+        type=["png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+        key="uploader_sickle_cell",
+    )
+
+    # Sample RBC crops (only individual RBC crops, NEVER malaria full-field smears)
+    sample_options = {
+        "Circular RBC Crop": "data/sickle/classification/test/circular/c0050.jpg",
+        "Elongated RBC Crop": "data/sickle/classification/test/elongated/e0079.jpg",
+        "Other Morphology Crop": "data/sickle/classification/test/other/o0018.jpg",
+    }
+    available_samples = {k: v for k, v in sample_options.items() if Path(v).exists()}
+    if available_samples:
+        st.markdown("**Or try a sample RBC crop:**")
+        cols = st.columns(len(available_samples))
+        for i, (label, path) in enumerate(available_samples.items()):
+            with cols[i]:
+                if st.button(f"🔴 {label}", key=f"sample_sickle_cell_{i}"):
+                    st.session_state["sample_sickle_cell"] = path
+                    st.session_state.pop("result_sickle_cell", None)
+                    st.rerun()
+
+    has_image = uploaded or "sample_sickle_cell" in st.session_state
+    if has_image:
+        if uploaded:
+            file_bytes = np.frombuffer(uploaded.read(), np.uint8)
+            img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            img_name = uploaded.name
+        else:
+            sample_path = st.session_state["sample_sickle_cell"]
+            img = cv2.imread(sample_path)
+            img_name = Path(sample_path).name
+
+        if img is None:
+            st.error("Could not decode image.")
+            return
+
+        img = _downscale_if_needed(img)
+
+        # Quality check
+        quality = assess_image_quality(img, "microscopy")
+        if not quality["passed"]:
+            for issue in quality["issues"]:
+                if issue["severity"] == "error":
+                    st.error(f"🚫 {issue['message']} ({issue['detail']})")
+            st.stop()
+        elif quality["has_warnings"]:
+            for issue in quality["issues"]:
+                if issue.get("type") == "resolution":
+                    st.caption(f"ℹ️ {issue['message']} (Normal for single-cell crops)")
+                else:
+                    st.warning(f"⚠️ {issue['message']} ({issue['detail']})")
+
+        # Action button
+        if st.button("🔬 Classify RBC Morphology", type="primary", key="analyse_sickle_cell", use_container_width=True):
+            with st.spinner("Classifying RBC morphology..."):
+                result = detector.predict(img, annotate=True)
+            st.session_state["result_sickle_cell"] = result
+            st.session_state["img_sickle_cell"] = img
+            st.session_state["img_name_sickle_cell"] = img_name
+            st.rerun()
+
+    # Display results
+    result_key = "result_sickle_cell"
+    if result_key in st.session_state:
+        result = st.session_state[result_key]
+        img = st.session_state["img_sickle_cell"]
+        img_name = st.session_state["img_name_sickle_cell"]
+
+        morphology_raw = result.morphology_class  # 'circular', 'elongated', 'other'
+        confidence = result.morphology_confidence
+        inf_time_sec = result.inference_time_sec
+
+        morphology_display = morphology_raw.capitalize() if morphology_raw else "Unknown"
+
+        # Confidence status assessment based on uncertainty criteria
+        effective_threshold = max(0.45, min_conf)
+        if confidence >= effective_threshold:
+            status_text = "Model prediction"
+            status_badge = "✅ High Confidence"
+        elif confidence >= 0.35:
+            status_text = "Low-confidence / review recommended"
+            status_badge = "⚠️ Review Recommended"
+        else:
+            status_text = "Very low-confidence / inconclusive"
+            status_badge = "❓ Inconclusive"
+
+        st.markdown("---")
+        st.markdown("### 📋 Morphology Classification Results")
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric("Predicted Morphology", morphology_display)
+        with m2:
+            st.metric("Model Confidence", f"{confidence:.1%}")
+        with m3:
+            st.metric("Confidence Status", status_badge)
+        with m4:
+            st.metric("Inference Time", f"{inf_time_sec * 1000:.1f} ms")
+
+        # Detailed tier note
+        if confidence < 0.35:
+            st.error(
+                f"❓ **{status_text}**: Model confidence ({confidence:.1%}) is below 35%. "
+                "The erythrocyte morphology cannot be reliably categorized from this image crop."
+            )
+        elif confidence < effective_threshold:
+            st.warning(
+                f"⚠️ **{status_text}**: Model confidence is {confidence:.1%} "
+                f"(below threshold {effective_threshold:.1%}). Visual confirmation by a hematologist is recommended."
+            )
+        else:
+            st.success(f"✓ **{status_text}**: Morphology classified as **{morphology_display}** ({confidence:.1%}).")
+
+        st.caption(
+            "Note: Confidence reflects the model's classification certainty on this cell crop, "
+            "**not** clinical diagnostic probability."
+        )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.image(
+                cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
+                caption=f"Original Crop ({img.shape[1]}×{img.shape[0]} px)",
+                use_container_width=True,
+            )
+        with c2:
+            if result.annotated_image is not None:
+                annotated_rgb = cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB)
+            else:
+                annotated_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            st.image(
+                annotated_rgb,
+                caption=f"Annotated Morphology: {morphology_display} ({confidence:.2f})",
+                use_container_width=True,
+            )
+
+        st.markdown("---")
+        st.warning(
+            "⚠️ **Scientific & Clinical Disclaimer:**\n\n"
+            "This prototype classifies individual erythrocyte images into morphology categories learned "
+            "from the erythrocytesIDB 2017 dataset (`circular`, `elongated`, `other`). "
+            "**'Elongated' is a morphology category and should not be interpreted as a diagnosis of sickle cell disease.** "
+            "Clinical interpretation requires appropriate laboratory testing and qualified review.\n\n"
+            "*Input Constraint:* The current model expects an individual cell crop, not a full-field blood smear."
+        )
+
+        st.markdown("### 📥 Download Results")
+        d1, d2 = st.columns(2)
+        with d1:
+            import csv, io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            patient = st.session_state.get("patient_details", {})
+            writer.writerow([
+                "patient_id",
+                "patient_name",
+                "morphology_class",
+                "confidence",
+                "inference_time_sec",
+                "timestamp",
+            ])
+            writer.writerow([
+                patient.get("patient_id", ""),
+                patient.get("name", ""),
+                morphology_raw,
+                f"{confidence:.4f}",
+                f"{inf_time_sec:.4f}",
+                datetime.now().isoformat(),
+            ])
+            stem = Path(img_name).stem
+            st.download_button(
+                "📊 Download CSV",
+                output.getvalue(),
+                f"morphology_{stem}.csv",
+                "text/csv",
+                use_container_width=True,
+            )
+        with d2:
+            if result.annotated_image is not None:
+                pil_img = Image.fromarray(cv2.cvtColor(result.annotated_image, cv2.COLOR_BGR2RGB))
+                buf = io.BytesIO()
+                pil_img.save(buf, format="PNG")
+                st.download_button(
+                    "🖼️ Download Annotated Image",
+                    buf.getvalue(),
+                    f"annotated_rbc_{stem}.png",
+                    "image/png",
+                    use_container_width=True,
+                )
+
+        update_session_metrics(
+            "sickle_cell",
+            {
+                "total_detections": 1,
+                "positive": morphology_raw in {"elongated", "other"},
+            },
+        )
+
+
 def _render_detection_module(submodule: str):
     """Render the Detection module UI for a specific disease."""
+    if submodule == "sickle_cell":
+        _render_sickle_cell_module()
+        return
+
     config = DETECTION_CONFIGS[submodule]
     model_path = MODEL_PATHS["detection"][submodule]
 
@@ -401,13 +643,6 @@ def _render_detection_module(submodule: str):
             "trophozoite": (0, 165, 255), "schizont": (0, 255, 255), "gametocyte": (255, 0, 255),
         }
         metric_keys = ["total_rbc", "total_parasites", "parasitemia_pct"]
-    elif submodule == "sickle_cell":
-        detector_loader = load_sickle_cell_model
-        class_colors = {
-            "normal_rbc": (200, 200, 200), "sickle_cell": (0, 0, 255),
-            "target_cell": (0, 165, 255), "spherocyte": (255, 0, 255),
-        }
-        metric_keys = ["total_normal", "total_abnormal", "sickle_percentage"]
     elif submodule == "all":
         detector_loader = load_all_model
         class_colors = {
@@ -884,9 +1119,10 @@ def main():
 
     elif module == "detection":
         submodule = st.session_state.get("detection_submodule", "malaria")
-        from app.components.icons import get_icon
-        icon_html = get_icon(submodule, "#64ffda", "22", "22")
-        st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
+        if submodule != "sickle_cell":
+            from app.components.icons import get_icon
+            icon_html = get_icon(submodule, "#64ffda", "22", "22")
+            st.markdown(f'### {icon_html} {DETECTION_SUBMODULES[submodule]} Detection', unsafe_allow_html=True)
         _render_detection_module(submodule)
 
     elif module == "radiology":

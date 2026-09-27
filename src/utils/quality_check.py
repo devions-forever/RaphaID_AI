@@ -29,7 +29,7 @@ def assess_image_quality(image_bgr: np.ndarray, modality: str = "microscopy") ->
 
     if modality == "microscopy":
         # Microscopy: high frequency detail critical
-        if laplacian_var < 50:
+        if laplacian_var < 14:
             issues.append({
                 'type': 'blur',
                 'severity': 'error',
